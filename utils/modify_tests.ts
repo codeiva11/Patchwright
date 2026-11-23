@@ -406,6 +406,13 @@ const FIXME_TARGETS: Partial<Record<string, FixmeReasonByTitle>> = {
 		["watchPosition should be notified", "Console CDP domain is disabled in Patchwright, so console events are never emitted and the test hangs waiting for them."],
 	]),
 	"tests/library/popup.spec.ts": new Map([["should expose function from browser context", "Patchwright inject-route bootstrap can alter init-script timing/order."]]),
+	"tests/library/browsercontext-page-event.spec.ts": new Map([
+		["should work with Shift-clicking", "Patchwright removes --disable-popup-blocking for stealth, causing Shift-click popup to be blocked."],
+		["should work with Ctrl-clicking", "Patchwright removes --disable-popup-blocking for stealth, causing Ctrl-click popup to be blocked."],
+	]),
+	"tests/library/page-clock.spec.ts": new Map([
+		["throws for invalid format", "Playwright v1.65 changed validator error message from 'Invalid ticks: NaN' to 'ticksNumber: expected float'."],
+	]),
 	"tests/library/tracing.spec.ts": new Map([
 		["should not flush console events", "Console CDP domain is disabled in Patchwright, so console events are never emitted and the test hangs waiting for them."],
 		["should flush console events on tracing stop", "Console CDP domain is disabled in Patchwright, so console events are never emitted and the test hangs waiting for them."],
