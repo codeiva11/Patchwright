@@ -120,11 +120,11 @@ function applyPatchwrightWorkarounds(sourceFile: SourceFile, relativePath: strin
 
 	switch (relativePath) {
 		case "tests/library/browsercontext-add-init-script.spec.ts": {
-			replaceOnce(
-				"it('should work without navigation, after all bindings', async ({ context }) => {",
-				"it('should work without navigation, after all bindings', async ({ context, server }) => {",
-			);
-			replaceOnce("it('should work without navigation in popup', async ({ context }) => {", "it('should work without navigation in popup', async ({ context, server }) => {");
+			// Ensure all test callbacks in this file have 'server' in their fixtures
+			editor.replace(/async \(\{([^}]*context[^}]*)\}\) => \{/g, (match: string, inside: string) => {
+				if (inside.includes("server")) return match;
+				return `async ({ ${inside.trim()}, server }) => {`;
+			});
 
 			replaceOnce(
 				"  const page = await context.newPage();\n\n  expect(await page.evaluate(() => (window as any)['temp'], undefined, undefined, false)).toBe(123);",
@@ -247,6 +247,12 @@ function applyPatchwrightWorkarounds(sourceFile: SourceFile, relativePath: strin
 		}
 
 		case "tests/library/popup.spec.ts": {
+			// Ensure all test callbacks in this file have 'server' in their fixtures
+			editor.replace(/async \(\{([^}]*page[^}]*)\}\) => \{/g, (match: string, inside: string) => {
+				if (inside.includes("server")) return match;
+				return `async ({ ${inside.trim()}, server }) => {`;
+			});
+
 			replaceOnce(
 				"  const injected = await page.evaluate(() => {\n    const win = window.open('about:blank');\n    return win['injected'];\n  }, undefined, undefined, false);",
 				"  const injected = await page.evaluate(async url => {\n    const win = window.open(url);\n    await new Promise(f => win.onload = f);\n    return win['injected'];\n  }, server.EMPTY_PAGE, undefined, false);",
