@@ -2,10 +2,7 @@
     "scripts": {
         "patch": "cd playwright && tsx ../patchwright_driver_patch.ts",
         "rebrand": "cd playwright && tsx ../utils/patchwright_rebranding.ts",
-        "prepatch": "git -C . submodule update --init --recursive patchwright-nodejs",
-        "patchwright-nodejs:update": "git -C . submodule update --init --recursive --remote patchwright-nodejs",
         "typecheck": "tsc --noEmit",
-        "pretypecheck": "git -C . submodule update --init --recursive patchwright-nodejs",
         "format:check": "bash -c 'tsx utils/format-indentation.ts --check ${@:-patchwright_driver_patch.ts driver_patches/} && git diff --check -- ${@:-patchwright_driver_patch.ts driver_patches/} && biome check --line-width=120 --formatter-enabled=false --diagnostic-level=error ${@:-patchwright_driver_patch.ts driver_patches/}' --",
         "format:fix": "tsx utils/format-indentation.ts",
         "format": "bash -c 'npm run format:fix -- ${@} && npm run format:check -- ${@}' --",

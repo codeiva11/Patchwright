@@ -59,8 +59,6 @@ jobs:
 
       - name: Patch Playwright Driver
         run: |
-          cd playwright
-          git -C .. submodule update --init --recursive --remote patchwright-nodejs
           cd .. && npm run patch
 
       - name: Generate Channels
