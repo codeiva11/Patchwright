@@ -1,0 +1,4 @@
+[submodule "patchwright-nodejs"]
+	path = patchwright-nodejs
+	url = https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-nodejs.git
+	branch = main
