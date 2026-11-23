@@ -45,15 +45,21 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Driver
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           branch_version="${{ inputs.playwright_version || github.event.inputs.playwright_version }}"
           if [ -z "$branch_version" ]; then
-            response=$(curl --silent "https://api.github.com/repos/microsoft/playwright/releases/latest")
-            branch_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+            response=$(curl --silent -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/microsoft/playwright/releases/latest" || true)
+            branch_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+          fi
+          if [ -z "$branch_version" ] || [ "$branch_version" = "v0.0.0" ]; then
+            branch_version="v1.51.0"
           else
             branch_version="v${branch_version#v}"
           fi
-          git clone https://github.com/microsoft/playwright --branch "$branch_version"
+          echo "Resolved Playwright version: $branch_version"
+          git clone --depth 1 https://github.com/microsoft/playwright --branch "$branch_version"
           cd playwright
           npm ci
 

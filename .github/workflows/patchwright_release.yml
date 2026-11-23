@@ -38,8 +38,8 @@ jobs:
           if [ -n "${{ github.event.inputs.version }}" ]; then
             raw_version="${{ github.event.inputs.version }}"
             normalized_version="v${raw_version#v}"
-            response=$(curl --silent "https://api.github.com/repos/${REPO}/releases/latest")
-            previous_playwright_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+            response=$(curl --silent -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${REPO}/releases/latest" || true)
+            previous_playwright_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
             echo "proceed=true" >>$GITHUB_OUTPUT
             echo "playwright_version=${normalized_version}" >>$GITHUB_OUTPUT
             echo "previous_playwright_version=${previous_playwright_version:-v0.0.0}" >>$GITHUB_OUTPUT
@@ -47,11 +47,11 @@ jobs:
           elif [ -n "${{ github.event.inputs.patchwright_release }}" ]; then
             raw_patchwright_release="${{ github.event.inputs.patchwright_release }}"
             normalized_patchwright_release="${raw_patchwright_release#v}"
-            response=$(curl --silent "https://api.github.com/repos/microsoft/playwright/releases/latest")
-            playwright_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+            response=$(curl --silent -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/microsoft/playwright/releases/latest" || true)
+            playwright_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 
-            response=$(curl --silent "https://api.github.com/repos/${REPO}/releases/latest")
-            previous_playwright_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+            response=$(curl --silent -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${REPO}/releases/latest" || true)
+            previous_playwright_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 
             echo "proceed=true" >>$GITHUB_OUTPUT
             echo "playwright_version=${playwright_version}" >>$GITHUB_OUTPUT
@@ -272,7 +272,7 @@ jobs:
               '',
               'The full `report.json` artifact is linked in `report_artifact.archive_download_url` above.',
               '',
-              'cc @Vinyzu',
+              'cc @codeiva11',
             ].join('\n');
 
             const existingIssues = await github.rest.issues.listForRepo({
@@ -387,7 +387,11 @@ jobs:
 
       - name: Install Playwright Driver
         run: |
-          git clone https://github.com/microsoft/playwright --branch ${{ needs.check-release-version.outputs.playwright_version }}
+          playwright_ver="${{ needs.check-release-version.outputs.playwright_version }}"
+          if [ -z "$playwright_ver" ] || [ "$playwright_ver" = "v0.0.0" ]; then
+            playwright_ver="v1.51.0"
+          fi
+          git clone --depth 1 https://github.com/microsoft/playwright --branch "$playwright_ver"
           cd playwright
           npm ci
 

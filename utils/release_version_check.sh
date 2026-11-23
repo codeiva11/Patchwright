@@ -5,7 +5,11 @@ set -euo pipefail
 get_latest_release() {
   local repo=$1
   local response
-  if ! response=$(curl --fail --silent --show-error "https://api.github.com/repos/$repo/releases/latest"); then
+  local auth_header=()
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    auth_header=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  fi
+  if ! response=$(curl --fail --silent --show-error "${auth_header[@]}" "https://api.github.com/repos/$repo/releases/latest"); then
     echo "Failed to fetch latest release for $repo" >&2
     echo "v0.0.0"
     return 0
@@ -33,8 +37,12 @@ tag_exists_in_releases() {
   local repo=$1
   local tag=$2
   local response
+  local auth_header=()
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    auth_header=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  fi
 
-  if ! response=$(curl --fail --silent --show-error "https://api.github.com/repos/$repo/releases?per_page=100"); then
+  if ! response=$(curl --fail --silent --show-error "${auth_header[@]}" "https://api.github.com/repos/$repo/releases?per_page=100"); then
     echo "Failed to fetch releases for $repo" >&2
     return 2
   fi
