@@ -330,6 +330,9 @@ const FIXME_TARGETS: Partial<Record<string, FixmeReasonByTitle>> = {
 		["should get post data for navigator.sendBeacon api calls", "Upstream expected-fail now passes in Patchwright; keep suite deterministic."],
 	]),
 	"tests/page/page-expose-function.spec.ts": new Map([["should be callable from-inside addInitScript", "Patchwright expose-binding bootstrap can alter init-script timing/order."]]),
+	"tests/page/page-filechooser.spec.ts": new Map([
+		["should not open file chooser without user activation", "Patchwright dispatch and activation timing differs from upstream."],
+	]),
 	"tests/page/page-evaluate.spec.ts": new Map([
 		["should throw when passed more than one parameter", "Patchwright uses third evaluate argument as isolatedContext boolean, changing argument validation semantics."],
 		["should modify global environment", "Patchwright evaluate string expressions run in utility context by default; global variable visibility differs."],
@@ -598,11 +601,24 @@ function insertConfiguredFixmes(sourceFile: SourceFile, relativePath: string): n
 		if (!isTestInvocation(callExpression)) continue;
 
 		let reason = fileReason;
-		if (!reason) {
+		if (!reason && reasonsByTitle) {
 			const titleArgument = callExpression.getArguments()[0];
 			const title = titleArgument && asStringLiteralValue(titleArgument);
 			if (!title) continue;
-			reason = reasonsByTitle?.get(title);
+			reason = reasonsByTitle.get(title);
+			if (!reason) {
+				// Modern Playwright prepends test IDs like 'PA-018 has navigator.webdriver set to true'
+				const strippedTitle = title.replace(/^[A-Z]{2,4}-\d{3,4}\s+/, "").trim();
+				reason = reasonsByTitle.get(strippedTitle);
+				if (!reason) {
+					for (const [configuredTitle, r] of reasonsByTitle.entries()) {
+						if (title === configuredTitle || title.includes(configuredTitle) || strippedTitle.includes(configuredTitle)) {
+							reason = r;
+							break;
+						}
+					}
+				}
+			}
 		}
 		if (reason && insertFixmeInTest(callExpression, reason, getTestBaseName(callExpression))) insertions += 1;
 	}
