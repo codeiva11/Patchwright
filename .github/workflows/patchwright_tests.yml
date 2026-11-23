@@ -58,8 +58,7 @@ jobs:
           npm ci
 
       - name: Patch Playwright Driver
-        run: |
-          cd .. && npm run patch
+        run: npm run patch
 
       - name: Generate Channels
         # Script exits 1 when files are modified, which is expected

@@ -160,9 +160,9 @@ export function patchRebranding(): void {
 						packageJson.version = process.env.patchwright_release;
 					}
 
-					packageJson.author["name"] = "Microsoft Corportation, patched by github.com/Kaliiiiiiiiii-Vinyzu/";
-					packageJson.homepage = "https://github.com/Kaliiiiiiiiii-Vinyzu/patchwright";
-					packageJson.repository["url"] = "https://github.com/Kaliiiiiiiiii-Vinyzu/patchwright";
+					packageJson.author["name"] = "codeiva11";
+					packageJson.homepage = "https://github.com/codeiva11/Patchwright";
+					packageJson.repository["url"] = "https://github.com/codeiva11/Patchwright";
 					packageJson.bin = {
 						"patchwright-core": "cli.js",
 					};
@@ -191,9 +191,9 @@ export function patchRebranding(): void {
 					packageJson.version = process.env.patchwright_release;
 				}
 
-				packageJson.author["name"] = "Microsoft Corportation, patched by github.com/Kaliiiiiiiiii-Vinyzu/";
-				packageJson.homepage = "https://github.com/Kaliiiiiiiiii-Vinyzu/patchwright";
-				packageJson.repository["url"] = "https://github.com/Kaliiiiiiiiii-Vinyzu/patchwright";
+				packageJson.author["name"] = "codeiva11";
+				packageJson.homepage = "https://github.com/codeiva11/Patchwright";
+				packageJson.repository["url"] = "https://github.com/codeiva11/Patchwright";
 				packageJson.bin = {
 					patchwright: "cli.js",
 				};

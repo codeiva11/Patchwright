@@ -392,8 +392,7 @@ jobs:
           npm ci
 
       - name: Patch Playwright Driver
-        run: |
-          cd .. && npm run patch
+        run: npm run patch
 
       - name: Generate Playwright Channels
         # Ignore the error exit code, as the script exits 1 when a file is modified.
