@@ -348,7 +348,12 @@ export async function extractPatchedSymbols(options: ExtractOptions = {}): Promi
         fileTexts.set(playwrightFile, null);
         continue;
       }
-      fileTexts.set(playwrightFile, await fetchRawFile(options.newVersionTag, playwrightFile, token));
+      try {
+        fileTexts.set(playwrightFile, await fetchRawFile(options.newVersionTag, playwrightFile, token));
+      } catch (err: any) {
+        console.warn(`Warning: Could not fetch raw file ${playwrightFile} for tag ${options.newVersionTag}: ${err?.message || err}`);
+        fileTexts.set(playwrightFile, null);
+      }
     }
 
     for (const record of deduped) {

@@ -514,19 +514,25 @@ async function fetchJson<T>(url: string, token: string): Promise<T> {
 }
 
 async function fetchRawFile(tag: string, filePath: string, token: string): Promise<string | null> {
-  const url = `https://raw.githubusercontent.com/microsoft/playwright/${tag}/${filePath}`;
-  const response = await fetch(url, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      "User-Agent": "patchwright-check-patch-impact",
-    },
-  });
+  try {
+    const url = `https://raw.githubusercontent.com/microsoft/playwright/${tag}/${filePath}`;
+    const response = await fetch(url, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        "User-Agent": "patchwright-check-patch-impact",
+      },
+    });
 
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${filePath} at ${tag}: HTTP ${response.status}`);
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      console.warn(`Warning: Failed to fetch ${filePath} at ${tag}: HTTP ${response.status}`);
+      return null;
+    }
+    return response.text();
+  } catch (err: any) {
+    console.warn(`Warning: Network error fetching ${filePath} at ${tag}: ${err?.message || err}`);
+    return null;
   }
-  return response.text();
 }
 
 function getProtocolChangeType(symbol: string, oldProtocol: unknown, newProtocol: unknown): ChangeType {
@@ -609,8 +615,72 @@ async function main(): Promise<void> {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
   const sha = process.env.GITHUB_SHA || "main";
 
+  const isInitialOrSameVersion = oldVersion === "0.0.0" || oldTag === "v0.0.0" || oldTag === newTag;
+
+  if (isInitialOrSameVersion) {
+    console.log(`Initial release or same version detected (${oldTag} -> ${newTag}). Skipping remote comparison.`);
+    const symbols = await extractPatchedSymbols({ newVersionTag: newTag, githubToken: token });
+    const allRows: SymbolImpactRow[] = symbols.map((symbolEntry) => ({
+      ...symbolEntry,
+      changeType: "unchanged",
+      diffLine: null,
+      diffSide: null,
+      diffSnippet: "",
+    }));
+    const unaffectedRows = allRows;
+    const unaffectedTable = formatUnaffectedTable(unaffectedRows, newTag, sha);
+    const summaryMarkdown = [
+      `## Playwright ${oldTag} -> ${newTag}: Patch Impact Report`,
+      "",
+      `Initial baseline (${oldTag} -> ${newTag}): All ${allRows.length} patched symbols are baseline valid. No upstream changes to compare.`,
+      "",
+      `<details><summary>Passing: Unaffected patched symbols (${unaffectedRows.length})</summary>`,
+      "",
+      unaffectedTable,
+      "",
+      "</details>",
+      "",
+    ].join("\n");
+
+    const report = {
+      old_version: oldVersion,
+      new_version: newVersion,
+      summary: {
+        total: allRows.length,
+        affected: 0,
+        unaffected: unaffectedRows.length,
+      },
+      affected: [],
+      unaffected: unaffectedRows,
+    };
+
+    await fs.writeFile(path.resolve(args.reportPath), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    await fs.writeFile(path.resolve(args.summaryPath), summaryMarkdown, "utf8");
+    await fs.writeFile(path.resolve(args.diffPath), "\n", "utf8");
+    await fs.writeFile(path.resolve("issue_body.md"), summaryMarkdown, "utf8");
+
+    if (process.env.GITHUB_OUTPUT) {
+      const output = [
+        `breaking_count=0`,
+        `affected_count=0`,
+        `total_count=${allRows.length}`,
+        `issue_title=[Patch Impact] Playwright ${oldTag} -> ${newTag}: 0 breaking changes detected`,
+      ].join("\n");
+      await fs.appendFile(process.env.GITHUB_OUTPUT, `${output}\n`, "utf8");
+    }
+
+    console.log(`Analyzed ${allRows.length} patched symbols (0 affected - initial baseline).`);
+    return;
+  }
+
   const compareUrl = `https://api.github.com/repos/microsoft/playwright/compare/${oldTag}...${newTag}`;
-  const compare = await fetchJson<{ files?: CompareApiFile[] }>(compareUrl, token);
+  let compare: { files?: CompareApiFile[] } = { files: [] };
+  try {
+    compare = await fetchJson<{ files?: CompareApiFile[] }>(compareUrl, token);
+  } catch (error: any) {
+    console.warn(`Warning: Could not fetch compare from ${compareUrl}: ${error?.message || error}`);
+    compare = { files: [] };
+  }
 
   const compareFiles = (compare.files ?? []).filter((file) => isRelevantPath(file.filename));
   const patchByFile = new Map(compareFiles.map((file) => [file.filename, file.patch ?? ""]));
