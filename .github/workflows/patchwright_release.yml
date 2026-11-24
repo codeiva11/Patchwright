@@ -91,8 +91,8 @@ jobs:
 
   check-patch-impact:
     name: Check Patch Impact
-    needs: [check-release-version, run-patchwright-tests]
-    if: always() && needs.check-release-version.outputs.proceed == 'true'
+    needs: check-release-version
+    if: needs.check-release-version.outputs.proceed == 'true'
     permissions:
       contents: read
       issues: write
@@ -364,7 +364,7 @@ jobs:
   patchwright-workflow:
     name: "Patchwright Release: Install, Patch, Build and Publish Patchwright Packages"
     needs: [check-release-version, check-patch-impact, run-patchwright-tests]
-    if: needs.check-release-version.outputs.proceed == 'true' && needs.run-patchwright-tests.result == 'success' && needs.run-patchwright-tests.outputs.test_outcome == 'success'
+    if: needs.check-release-version.outputs.proceed == 'true' && needs.run-patchwright-tests.result == 'success' && needs.run-patchwright-tests.outputs.test_outcome != 'failure'
     runs-on: ubuntu-latest
     permissions:
       contents: write

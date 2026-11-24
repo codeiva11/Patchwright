@@ -114,6 +114,10 @@ jobs:
         run: |
           if [ "${{ steps.test_detection.outcome }}" = "failure" ] || [ "${{ steps.test_page.outcome }}" = "failure" ] || [ "${{ steps.test_library.outcome }}" = "failure" ]; then
             echo "test_outcome=failure" >> "$GITHUB_OUTPUT"
+            if [ "${{ github.event_name }}" = "workflow_call" ]; then
+              echo "Tests failed under workflow_call, exiting with failure code."
+              exit 1
+            fi
           else
             echo "test_outcome=success" >> "$GITHUB_OUTPUT"
           fi
