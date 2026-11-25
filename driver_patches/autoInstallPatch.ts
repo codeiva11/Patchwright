@@ -64,24 +64,23 @@ export function patchAutoInstall(project: Project) {
 
 	// 3) Replace the hard "no browser found" error with an automatic installation
 	//    attempt, falling back to the original error when installation is not possible.
-	const notFoundThrow = assertDefined(
-		browserTypeSourceFile
-			.getDescendantsOfKind(SyntaxKind.ThrowStatement)
-			.find(throwStatement => throwStatement.getText().includes("Patchwright: no official system browser found")),
-		"no-system-browser found throw statement",
-	);
-	const launchBlock = notFoundThrow.getParentIfKindOrThrow(SyntaxKind.Block);
-	launchBlock.insertStatements(
-		launchBlock.getStatements().indexOf(notFoundThrow),
-		`
-		// Patchwright: no system browser installed - install one automatically
-		// (Brave -> Chrome -> Chromium) so a clean machine works out of the box.
-		// Opt out with PATCHWRIGHT_AUTO_INSTALL=0.
-		if (process.env.PATCHWRIGHT_AUTO_INSTALL !== '0') {
-			const installedCandidate = await patchwrightAutoInstallSystemBrowser();
-			if (installedCandidate) return installedCandidate;
-		}
-	`,
+	//    Done as an exact-TEXT replacement on the throw injected by browserTypePatch:
+	//    AST insertStatements proved position-unreliable here (it landed at the block
+	//    top and would have run auto-install on every launch, before the scan).
+	applyReplacements(
+		browserTypeSourceFile,
+		[[
+			"\t\t\tthrow new Error('Patchwright: no official system browser found (Brave, Google Chrome or Chromium). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
+			"\t\t\t// Patchwright: the scan found nothing - install one automatically\n" +
+				"\t\t\t// (Brave -> Chrome -> Chromium) so a clean machine works out of the box.\n" +
+				"\t\t\t// Opt out with PATCHWRIGHT_AUTO_INSTALL=0.\n" +
+				"\t\t\tif (process.env.PATCHWRIGHT_AUTO_INSTALL !== '0') {\n" +
+					"\t\t\t\tconst installedCandidate = await patchwrightAutoInstallSystemBrowser();\n" +
+					"\t\t\t\tif (installedCandidate) return installedCandidate;\n" +
+					"\t\t\t}\n" +
+					"\t\t\tthrow new Error('Patchwright: no official system browser found (Brave, Google Chrome or Chromium). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
+		]],
+		"server/browserType.ts (auto-install before the no-browser throw)",
 	);
 
 	// 4) Append the installer helpers at module scope.
