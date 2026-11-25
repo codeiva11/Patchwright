@@ -442,19 +442,23 @@ Behavior on upstream changes:
 
 ### Hotfix Releases Between Playwright Versions (no waiting needed)
 
-A fixed build does **not** have to wait for the next upstream Playwright release. Run the
+A fixed build does **not** have to wait for the next upstream Playwright release — and it
+keeps the **same version number** as the upstream release (e.g. `1.65.1`). Run the
 **Patchwright Hotfix Release** workflow (Actions → Patchwright Hotfix Release → Run
 workflow) with the current Playwright tag (e.g. `v1.65.1`):
 
-* It builds, verifies the feature markers inside the tarball, and publishes as
-  `patchwright-core@<next-free>-pw.<n>` (e.g. `1.65.2-pw.1`) under the **`pw` dist-tag** —
-  above the buggy `1.65.1` release, with no collision when real Playwright `1.65.2`
-  ships later.
-* Install from npm: `npm i patchwright-core@pw` (or pin `patchwright-core@1.65.2-pw.1`).
-* Or install straight from the GitHub release it creates:
-  `npm i https://github.com/<owner>/<repo>/releases/download/v1.65.2-pw.1/patchwright-core-1.65.2-pw.1.tgz`
-* Local builds can stamp the same scheme via `PATCHWRIGHT_VERSION=1.65.2-pw.1` before
-  running `npx tsx utils/patchwright_rebranding.ts` (from the `playwright/` directory).
+* It builds with all current features, verifies the feature markers inside the tarball,
+  and pushes to **both channels with the same version number** (`1.65.1`):
+  * **npm** — published only if that exact version is still free on the registry; if the
+    same version already exists there (e.g. a buggy `1.65.1`), npm publishing is skipped
+    automatically.
+  * **GitHub** — always: the tarball is attached to the GitHub release for that same
+    version (existing assets are replaced with `--clobber`).
+* Install the fixed build from GitHub whenever npm already has the version:
+  `npm i https://github.com/<owner>/<repo>/releases/download/1.65.1/patchwright-core-1.65.1.tgz`
+* No version-suffix scheme and no collision when a real Playwright `1.65.2` ships later.
+* Local builds can stamp the same version via `PATCHWRIGHT_VERSION=1.65.1` before running
+  `npx tsx utils/patchwright_rebranding.ts` (from the `playwright/` directory).
 
 ## 📖 All Commands Reference
 

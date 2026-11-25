@@ -1,15 +1,20 @@
 name: Patchwright Hotfix Release
 
 # Re-release Patchwright features on TOP of an already-published upstream Playwright
-# version, without waiting for the next Playwright release. Use this when the npm
-# release for the current Playwright version is buggy and a fixed build is needed now.
+# version WITHOUT waiting for the next Playwright release. The build keeps the SAME
+# version number as the upstream Playwright release (e.g. 1.65.1) and is pushed to
+# BOTH channels:
 #
-# Versioning scheme: `<next-free-patch>-pw.<n>` against the source Playwright version,
-# e.g. a fixed build for Playwright v1.65.1 becomes `1.65.2-pw.1` (then `1.65.2-pw.2`,
-# ...). Precedence stays above the published 1.65.1 while a future real Playwright
-# 1.65.2/1.65.3 release never collides (1.65.2 > 1.65.2-pw.1, 1.65.3 > ...).
-# Published under the `pw` dist-tag so `npm i patchwright-core@pw` resolves to the
-# hotfix without stealing the `latest` tag from version-mirror releases.
+#  - npm: published if that exact version is still free on the registry; if the same
+#    version already exists there (e.g. a buggy 1.65.1), npm publishing is skipped
+#    automatically and the fixed build goes out through GitHub instead.
+#  - GitHub: ALWAYS — the tarball is attached to the GitHub release for that same
+#    version (assets are replaced with --clobber if the release already exists).
+#
+# Consumers install the fixed build straight from GitHub when npm already has the
+# version:
+#
+#   npm i https://github.com/<owner>/<repo>/releases/download/1.65.1/patchwright-core-1.65.1.tgz
 
 on:
   workflow_dispatch:
@@ -19,16 +24,11 @@ on:
         required: true
         default: 'v1.65.1'
       version:
-        description: 'Optional explicit release version (e.g. 1.65.2-pw.1). Leave empty to auto-compute the next free one.'
+        description: 'Optional release version override. Defaults to the Playwright version itself (e.g. 1.65.1).'
         required: false
         default: ''
       npm_publish:
-        description: 'Publish patchwright-core to npm (dist-tag: pw)'
-        required: false
-        default: true
-        type: boolean
-      create_github_release:
-        description: 'Create a GitHub release with the tarball assets'
+        description: 'Attempt npm publish (skipped automatically if the same version already exists there)'
         required: false
         default: true
         type: boolean
@@ -39,7 +39,7 @@ permissions:
 
 jobs:
   hotfix-build-and-publish:
-    name: Hotfix Build & Publish
+    name: Hotfix Build & GitHub Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -63,24 +63,8 @@ jobs:
           set -euo pipefail
           playwright_tag="${{ github.event.inputs.playwright_tag }}"
           playwright_version="${playwright_tag#v}"
-          major=$(echo "$playwright_version" | cut -d. -f1)
-          minor=$(echo "$playwright_version" | cut -d. -f2)
-          patch=$(echo "$playwright_version" | cut -d. -f3)
           explicit="${{ github.event.inputs.version }}"
-          if [ -n "$explicit" ]; then
-            version="$explicit"
-          else
-            patch=$((patch + 1))
-            n=1
-            while true; do
-              version="${major}.${minor}.${patch}-pw.${n}"
-              if npm view "patchwright-core@${version}" version >/dev/null 2>&1; then
-                n=$((n + 1))
-              else
-                break
-              fi
-            done
-          fi
+          version="${explicit:-$playwright_version}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Release version: ${version} (source Playwright ${playwright_version})"
 
@@ -104,7 +88,7 @@ jobs:
           npm run build || true
           npm run build
 
-      - name: Rebrand With Hotfix Version
+      - name: Rebrand With Release Version
         env:
           PATCHWRIGHT_VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -130,33 +114,41 @@ jobs:
           done
           echo "All feature markers present in ${tarball}."
 
-      - name: Publish Patchwright-Core with pw dist-tag
+      - name: Publish to npm (skipped when the version already exists there)
         if: ${{ github.event.inputs.npm_publish == 'true' || github.event.inputs.npm_publish == true }}
+        id: npm_publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           version="${{ steps.version.outputs.version }}"
           tarball="patchwright-core-${version}.tgz"
           if npm view "patchwright-core@${version}" version >/dev/null 2>&1; then
-            echo "Skipping: patchwright-core@${version} already published."
+            echo "patchwright-core@${version} already on npm — skipping npm publish."
+            echo "result=exists-on-npm" >> "$GITHUB_OUTPUT"
           else
-            npm publish "$tarball" --access=public --tag pw
+            npm publish "$tarball" --access=public
+            echo "result=published-to-npm" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create GitHub Release
-        if: ${{ (github.event.inputs.create_github_release == 'true' || github.event.inputs.create_github_release == true) }}
+      - name: Create/Update GitHub Release (same-version assets)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           version="${RELEASE_VERSION}"
-          if gh release view "v${version}" >/dev/null 2>&1; then
-            gh release upload "v${version}" "patchwright-core-${version}.tgz" --clobber
+          tarball="patchwright-core-${version}.tgz"
+          channel_note="npm already has ${version}, so install this fixed build from GitHub: npm i https://github.com/${GITHUB_REPOSITORY}/releases/download/${version}/${tarball}"
+          if [ "${{ steps.npm_publish.outputs.result }}" = "published-to-npm" ]; then
+            channel_note="Published to npm as patchwright-core@${version}. Also available on this release: npm i https://github.com/${GITHUB_REPOSITORY}/releases/download/${version}/${tarball}"
+          fi
+          if gh release view "${version}" >/dev/null 2>&1; then
+            gh release upload "${version}" "$tarball" --clobber
+            gh release edit "${version}" --notes "Fixed build with all Patchwright features, based on upstream Playwright ${{ github.event.inputs.playwright_tag }}. ${channel_note}"
           else
-            gh release create "v${version}" \
+            gh release create "${version}" \
               --title "Patchwright ${version}" \
-              --notes "Hotfix release built from upstream Playwright ${{ github.event.inputs.playwright_tag }}. Install: \`npm i https://github.com/${GITHUB_REPOSITORY}/releases/download/v${version}/patchwright-core-${version}.tgz\`" \
-              "patchwright-core-${version}.tgz"
+              --notes "Fixed build with all Patchwright features, based on upstream Playwright ${{ github.event.inputs.playwright_tag }}. ${channel_note}" \
+              "$tarball"
           fi
 
       - name: Upload Build Artifacts
