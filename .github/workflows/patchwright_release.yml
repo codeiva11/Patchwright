@@ -452,7 +452,7 @@ jobs:
           npm pack --pack-destination ../../.. || true
 
       - name: Create Patchwright Release
-        if: env.patchwright_release == '' || needs.check-release-version.outputs.previous_playwright_version != needs.check-release-version.outputs.playwright_version
+        if: env.patchwright_release == '' || needs.check-release-version.outputs.previous_playwright_version != needs.check-release-version.outputs.playwright_version || github.event_name == 'workflow_dispatch'
         env:
           PLAYWRIGHT_VERSION: ${{ needs.check-release-version.outputs.playwright_version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
