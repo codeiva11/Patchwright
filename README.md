@@ -165,6 +165,9 @@ with the Chrome identity the UA claims, using a single native `Network.setUserAg
 * **`navigator.brave` removed natively** via `Reflect.deleteProperty` on both the instance and
   `Navigator.prototype` — `Object.getOwnPropertyNames(navigator)` stays empty, exactly like a
   real Chrome. Opt out with `PATCHWRIGHT_SYSTEM_STEALTH=0`.
+* **`navigator.brave` removed in Web Workers too** — Brave exposes it in dedicated worker
+  realms (`WorkerNavigator`), where page init scripts never run; Patchwright deletes it in
+  every worker session before the worker's own scripts execute.
 
 ### 13. ✅ TLS / JA4 Alignment (`PATCHWRIGHT_TLS_ALIGN`)
 
@@ -203,7 +206,9 @@ never Chrome-for-Testing builds:
 | :--- | :--- |
 | **Windows** | `winget install Brave.Brave` → `winget install Google.Chrome` (user scope first) → official Brave standalone installer → official Chrome MSI |
 | **macOS** | `brew install --cask brave-browser` → `google-chrome` → official Brave dmg (`hdiutil` mount, `~/Applications` also scanned) |
-| **Linux** | `flatpak install --user com.brave.Browser` / `com.google.Chrome` (no root) → official Brave install script → Chrome `.deb`/`.rpm` → distro `chromium` packages (`sudo -n` only — a password prompt would hang the pipeline) |
+| **Linux** | `flatpak install --user com.brave.Browser` / `com.google.Chrome` (no root, Flathub-verified) → official Brave **apt repository** (GPG-verified packages, no curl-pipe-to-shell) → Chrome `.deb`/`.rpm` → distro `chromium` packages (`sudo -n` only — a password prompt would hang the pipeline) |
+
+**Hardening:** downloaded installers are **signature-verified before execution** (Authenticode on Windows, `codesign` + `spctl` on macOS); concurrent launches share a **single-flight** installation attempt; a failed attempt is never retried within the process (relaunches fail fast); Linux scans also cover `/usr/local/bin` and Flatpak exports.
 
 After any successful install the browser scan re-runs and launches the newly installed
 browser. Opt out with `PATCHWRIGHT_AUTO_INSTALL=0`; if installation is not possible the
@@ -424,7 +429,9 @@ keeps the **same version number** as the upstream release (e.g. `1.65.1`). The s
 ### CLI Commands
 
 Patchwright never downloads or launches bundled Chrome-for-Testing builds, so there is **no
-browser-download command at all** — browser resolution is always system-first.
+browser-download command at all** — browser resolution is always system-first. Bin names are
+distinct (`patchwright` = test-runner wrapper, `patchwright-core` = driver CLI), so installing
+both packages never clobbers either command.
 
 | CLI Command | Description |
 | :--- | :--- |
