@@ -121,6 +121,7 @@ jobs:
 
       - name: Run Page Tests
         id: test_page
+        timeout-minutes: 25
         continue-on-error: ${{ github.event_name == 'workflow_call' }}
         run: |
           cd playwright
@@ -128,6 +129,7 @@ jobs:
 
       - name: Run Library Tests
         id: test_library
+        timeout-minutes: 40
         continue-on-error: ${{ github.event_name == 'workflow_call' }}
         run: |
           cd playwright
