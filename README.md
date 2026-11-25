@@ -440,24 +440,23 @@ Behavior on upstream changes:
   `node utils/custom_tests/runtime_smoke_test.mjs`, `node utils/custom_tests/tls_ja4_check.mjs`,
   and the live-detector suite.
 
-### Hotfix Releases Between Playwright Versions (no waiting needed)
+### Fixed Builds Between Playwright Versions (no waiting needed)
 
 A fixed build does **not** have to wait for the next upstream Playwright release — and it
-keeps the **same version number** as the upstream release (e.g. `1.65.1`). Run the
-**Patchwright Hotfix Release** workflow (Actions → Patchwright Hotfix Release → Run
-workflow) with the current Playwright tag (e.g. `v1.65.1`):
+keeps the **same version number** as the upstream release (e.g. `1.65.1`). The standard
+**Patchwright Release Build and Publish** workflow handles both channels:
 
-* It builds with all current features, verifies the feature markers inside the tarball,
-  and pushes to **both channels with the same version number** (`1.65.1`):
-  * **npm** — published only if that exact version is still free on the registry; if the
-    same version already exists there (e.g. a buggy `1.65.1`), npm publishing is skipped
-    automatically.
-  * **GitHub** — always: the tarball is attached to the GitHub release for that same
-    version (existing assets are replaced with `--clobber`).
+* **npm** — published only if that exact version is still free on the registry; if the
+  same version already exists there (e.g. a buggy `1.65.1`), npm publishing is skipped
+  automatically (`npm view` check before `npm publish`).
+* **GitHub** — always: the built tarballs (`patchwright-core-<version>.tgz` and the
+  optional test-runner wrapper) are attached to the GitHub release for that same version;
+  existing release assets are replaced (`--clobber`) on every run, so a fixed build
+  pushed with the same version always lands on GitHub.
 * Install the fixed build from GitHub whenever npm already has the version:
   `npm i https://github.com/<owner>/<repo>/releases/download/1.65.1/patchwright-core-1.65.1.tgz`
 * No version-suffix scheme and no collision when a real Playwright `1.65.2` ships later.
-* Local builds can stamp the same version via `PATCHWRIGHT_VERSION=1.65.1` before running
+* Local builds can stamp the version via `PATCHWRIGHT_VERSION=1.65.1` before running
   `npx tsx utils/patchwright_rebranding.ts` (from the `playwright/` directory).
 
 ## 📖 All Commands Reference

@@ -444,11 +444,35 @@ jobs:
             npm publish --access=public --provenance
           fi
 
+      - name: Pack Patchwright Tarballs
+        run: |
+          cd playwright/packages/patchwright-core
+          npm pack --pack-destination ../../..
+          cd ../patchwright
+          npm pack --pack-destination ../../.. || true
+
       - name: Create Patchwright Release
         if: env.patchwright_release == '' || needs.check-release-version.outputs.previous_playwright_version != needs.check-release-version.outputs.playwright_version
         env:
           PLAYWRIGHT_VERSION: ${{ needs.check-release-version.outputs.playwright_version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$PLAYWRIGHT_VERSION" \
-            --title "Patchwright $PLAYWRIGHT_VERSION" \
-            --notes "This is an automatic deployment in response to a new release of [microsoft/playwright](https://github.com/microsoft/playwright). The original release can be seen [here](https://github.com/microsoft/playwright/releases/tag/$PLAYWRIGHT_VERSION)."
+          # Push the built packages to GitHub as release assets, keeping the SAME
+          # version as the npm release. This makes a fixed build installable from
+          # GitHub whenever that exact version already exists on npm:
+          #   npm i https://github.com/${GITHUB_REPOSITORY}/releases/download/${PLAYWRIGHT_VERSION}/patchwright-core-${PLAYWRIGHT_VERSION}.tgz
+          core_tarball="patchwright-core-${PLAYWRIGHT_VERSION}.tgz"
+          wrapper_tarball="patchwright-${PLAYWRIGHT_VERSION}.tgz"
+          test -f "$core_tarball" || core_tarball=$(ls patchwright-core-*.tgz 2>/dev/null | head -1 || true)
+          test -n "$core_tarball" || { echo "No patchwright-core tarball found"; exit 1; }
+          notes="This is an automatic deployment in response to a new release of [microsoft/playwright](https://github.com/microsoft/playwright). The original release can be seen [here](https://github.com/microsoft/playwright/releases/tag/${PLAYWRIGHT_VERSION}). If this exact version already exists on npm, install this (possibly newer/fixed) build from GitHub: npm i https://github.com/${GITHUB_REPOSITORY}/releases/download/${PLAYWRIGHT_VERSION}/${core_tarball}"
+          if gh release view "$PLAYWRIGHT_VERSION" >/dev/null 2>&1; then
+            gh release upload "$PLAYWRIGHT_VERSION" "$core_tarball" --clobber
+            [ -f "$wrapper_tarball" ] && gh release upload "$PLAYWRIGHT_VERSION" "$wrapper_tarball" --clobber
+            gh release edit "$PLAYWRIGHT_VERSION" --notes "$notes"
+          else
+            gh release create "$PLAYWRIGHT_VERSION" \
+              --title "Patchwright $PLAYWRIGHT_VERSION" \
+              --notes "$notes" \
+              "$core_tarball" $([ -f "$wrapper_tarball" ] && echo "$wrapper_tarball")
+          fi
