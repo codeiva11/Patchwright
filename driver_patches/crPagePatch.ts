@@ -1,5 +1,5 @@
 import { type Project, SyntaxKind } from "ts-morph";
-import { assertDefined } from "./utils.ts";
+import { assertDefined, replaceRequired } from "./utils.ts";
 
 // -------------------------
 // server/chromium/crPage.ts
@@ -53,10 +53,17 @@ export function patchCRPage(project: Project) {
 			.find(statement => statement.getText().includes("this._mainFrameSession._initialize")),
 	);
 	initializePageStatement.replaceWithText(
-		initializePageStatement
-			.getText()
-			.replace("this._page.reportAsNew(this._opener?._page, undefined)", "this._reportAsNew()")
-			.replace("this._page.reportAsNew(this._opener?._page, error)", "this._reportAsNew(error)"),
+		replaceRequired(
+			replaceRequired(
+				initializePageStatement.getText(),
+				"this._page.reportAsNew(this._opener?._page, undefined)",
+				"this._reportAsNew()",
+				"crPage.ts reportAsNew (undefined)",
+			),
+			"this._page.reportAsNew(this._opener?._page, error)",
+			"this._reportAsNew(error)",
+			"crPage.ts reportAsNew (error)",
+		),
 	);
 
 	// -- exposeBinding Method --
@@ -97,7 +104,14 @@ export function patchCRPage(project: Project) {
 	const sessionForFrameMethod = crPageClass.getMethodOrThrow("_sessionForFrame");
 	// Replace the error message for detached frames with a more concise version
 	const methodText = sessionForFrameMethod.getText();
-	sessionForFrameMethod.replaceWithText(methodText.replace("Frame has been detached.", "Frame was detached"));
+	sessionForFrameMethod.replaceWithText(
+		replaceRequired(
+			methodText,
+			"Frame has been detached.",
+			"Frame was detached",
+			"crPage.ts _sessionForFrame error message",
+		),
+	);
 
 	// ------- FrameSession Class -------
 	const frameSessionClass = crPageSourceFile.getClassOrThrow("FrameSession");

@@ -1,4 +1,5 @@
 import type { Project } from "ts-morph";
+import { replaceRequired } from "./utils.ts";
 
 
 // ------------------------
@@ -52,13 +53,17 @@ export function patchBrowserContext(project: Project) {
 	// "Dismiss dialog" trace entry. Wrapping in _wrapApiCall({ internal: true }) suppresses it.
 	{
 		let sourceText = browserContextSourceFile.getFullText();
-		sourceText = sourceText.replace(
+		sourceText = replaceRequired(
+			sourceText,
 			"dialog.accept({}, kNoTimeout).catch(() => {});",
-			"dialogObject._wrapApiCall(() => dialog.accept({}, kNoTimeout).catch(() => {}), { internal: true });"
+			"dialogObject._wrapApiCall(() => dialog.accept({}, kNoTimeout).catch(() => {}), { internal: true });",
+			"client/browserContext.ts auto-dismiss accept wrapper",
 		);
-		sourceText = sourceText.replace(
+		sourceText = replaceRequired(
+			sourceText,
 			"dialog.dismiss({}, kNoTimeout).catch(() => {});",
-			"dialogObject._wrapApiCall(() => dialog.dismiss({}, kNoTimeout).catch(() => {}), { internal: true });"
+			"dialogObject._wrapApiCall(() => dialog.dismiss({}, kNoTimeout).catch(() => {}), { internal: true });",
+			"client/browserContext.ts auto-dismiss dismiss wrapper",
 		);
 		browserContextSourceFile.replaceWithText(sourceText);
 	}

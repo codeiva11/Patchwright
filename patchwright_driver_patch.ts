@@ -62,6 +62,18 @@ clientPatches.patchTracing(project);
 // ----------------
 clientPatches.patchWorker(project);
 
+// ----------------
+// client/input.ts
+// (human-like mouse/keyboard/scroll)
+// ----------------
+clientPatches.patchHumanInput(project);
+
+// ------------------------------------
+// client/browserType.ts + browser.ts
+// (proxy timezone/geo/language alignment)
+// ------------------------------------
+clientPatches.patchGeoAlign(project);
+
 // ------------------------
 // server/browserContext.ts
 // ------------------------
@@ -76,6 +88,32 @@ patches.patchBuild(project);
 // server/chromium/chromium.ts
 // ---------------------------
 patches.patchChromium(project);
+
+// ----------------------------------
+// server/chromium/launch pipeline
+// (WebRTC leak protection flags)
+// ----------------------------------
+patches.patchChromiumLaunch(project);
+
+// ----------------------------------
+// server/registry/index.ts
+// (system browser channels)
+// ----------------------------------
+patches.patchSystemBrowser(project);
+
+// ------------------------
+// server/browserType.ts
+// (patched binary auto-load +
+// neutral temp profile naming)
+// ------------------------
+patches.patchBrowserType(project);
+
+// -----------------------------------
+// server/browserType.ts
+// (automatic system-browser installation
+// when no official browser is installed)
+// -----------------------------------
+patches.patchAutoInstall(project);
 
 // -----------------------------------
 // server/chromium/chromiumSwitches.ts
@@ -156,6 +194,18 @@ patches.patchPageBinding(project);
 // server/clock.ts
 // --------------
 patches.patchClock(project);
+
+// ------------------------------------
+// server/browserContext.ts
+// (fingerprint spoofing + permissions)
+// ------------------------------------
+patches.patchFingerprint(project);
+// ----------------------------------
+// server/chromium/crPage.ts
+// (system-browser stealth: UA brands +
+// HeadlessChrome token fix)
+// ----------------------------------
+patches.patchSystemStealth(project);
 
 // ----------------------
 // Patchwright CLI Aliases
@@ -260,6 +310,43 @@ await mutateYaml("packages/protocol/spec/mixins.yml", protocol => {
 await mutateYaml("packages/protocol/spec/network.yml", protocol => {
 	protocol.Route.commands.continue.parameters.patchwrightInitScript = "boolean?";
 });
+
+// --------------------------------
+// Post-patch sanity verification
+// --------------------------------
+// Textual patch targets are verified at application time (see driver_patches/utils.ts);
+// this final sweep asserts the core guarantees directly on the patched sources, so that an
+// updated upstream cannot silently drop them.
+const sanityChecks: Array<{ file: string; require?: string[]; forbid?: string[] }> = [
+	{
+		file: "packages/playwright-core/src/server/browserType.ts",
+		require: ["pw-artifacts-", "pw_${this._name}_profile-"],
+		forbid: ["playwright-artifacts-", "playwright_${this._name}dev_profile-"],
+	},
+	{
+		file: "packages/playwright-core/src/cli/program.ts",
+		require: ["Patchwright"],
+		forbid: ["Playwright version:", "all playwright installations"],
+	},
+	{
+		file: "packages/playwright-core/src/cli/installActions.ts",
+		forbid: ["Playwright version:", "npx playwright install", "Playwright Host validation"],
+	},
+];
+for (const sanityCheck of sanityChecks) {
+	const sourceFile =
+		project.getSourceFile(sourceFile => sourceFile.getFilePath().replace(/\\/g, "/").endsWith(sanityCheck.file)) ??
+		project.addSourceFileAtPath(sanityCheck.file);
+	const text = sourceFile.getFullText();
+	for (const required of sanityCheck.require ?? [])
+		if (!text.includes(required))
+			throw new Error(`Post-patch verification failed: ${sanityCheck.file} must contain ${JSON.stringify(required)}`);
+	for (const forbidden of sanityCheck.forbid ?? [])
+		if (text.includes(forbidden))
+			throw new Error(
+				`Post-patch verification failed: ${sanityCheck.file} must not contain ${JSON.stringify(forbidden)}`,
+			);
+}
 
 // Save and format all patched TypeScript sources before they are built.
 await project.save();

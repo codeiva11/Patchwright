@@ -1,0 +1,167 @@
+name: Patchwright Hotfix Release
+
+# Re-release Patchwright features on TOP of an already-published upstream Playwright
+# version, without waiting for the next Playwright release. Use this when the npm
+# release for the current Playwright version is buggy and a fixed build is needed now.
+#
+# Versioning scheme: `<next-free-patch>-pw.<n>` against the source Playwright version,
+# e.g. a fixed build for Playwright v1.65.1 becomes `1.65.2-pw.1` (then `1.65.2-pw.2`,
+# ...). Precedence stays above the published 1.65.1 while a future real Playwright
+# 1.65.2/1.65.3 release never collides (1.65.2 > 1.65.2-pw.1, 1.65.3 > ...).
+# Published under the `pw` dist-tag so `npm i patchwright-core@pw` resolves to the
+# hotfix without stealing the `latest` tag from version-mirror releases.
+
+on:
+  workflow_dispatch:
+    inputs:
+      playwright_tag:
+        description: 'Upstream Playwright tag to build against (e.g. v1.65.1)'
+        required: true
+        default: 'v1.65.1'
+      version:
+        description: 'Optional explicit release version (e.g. 1.65.2-pw.1). Leave empty to auto-compute the next free one.'
+        required: false
+        default: ''
+      npm_publish:
+        description: 'Publish patchwright-core to npm (dist-tag: pw)'
+        required: false
+        default: true
+        type: boolean
+      create_github_release:
+        description: 'Create a GitHub release with the tarball assets'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  hotfix-build-and-publish:
+    name: Hotfix Build & Publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Configure Fast APT Mirror
+        uses: vegardit/fast-apt-mirror.sh@v1
+
+      - name: Setup Node v24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install NPM Dependencies (Patchwright)
+        run: npm ci
+
+      - name: Compute Release Version
+        id: version
+        run: |
+          set -euo pipefail
+          playwright_tag="${{ github.event.inputs.playwright_tag }}"
+          playwright_version="${playwright_tag#v}"
+          major=$(echo "$playwright_version" | cut -d. -f1)
+          minor=$(echo "$playwright_version" | cut -d. -f2)
+          patch=$(echo "$playwright_version" | cut -d. -f3)
+          explicit="${{ github.event.inputs.version }}"
+          if [ -n "$explicit" ]; then
+            version="$explicit"
+          else
+            patch=$((patch + 1))
+            n=1
+            while true; do
+              version="${major}.${minor}.${patch}-pw.${n}"
+              if npm view "patchwright-core@${version}" version >/dev/null 2>&1; then
+                n=$((n + 1))
+              else
+                break
+              fi
+            done
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Release version: ${version} (source Playwright ${playwright_version})"
+
+      - name: Install Playwright Driver Source
+        run: |
+          git clone --depth 1 https://github.com/microsoft/playwright --branch "${{ github.event.inputs.playwright_tag }}"
+          cd playwright
+          npm ci
+
+      - name: Apply AST Patches
+        run: npm run patch
+
+      - name: Generate Playwright Channels
+        run: |
+          cd playwright
+          node utils/generate_channels.js || true
+
+      - name: Build Patchwright Packages
+        run: |
+          cd playwright
+          npm run build || true
+          npm run build
+
+      - name: Rebrand With Hotfix Version
+        env:
+          PATCHWRIGHT_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd playwright
+          npx tsx ../utils/patchwright_rebranding.ts
+          echo "Built patchwright-core@$(node -p "require('./packages/patchwright-core/package.json').version")"
+
+      - name: Pack Tarballs
+        run: |
+          cd playwright/packages/patchwright-core
+          npm pack --pack-destination ../../..
+          cd ../patchwright
+          npm pack --pack-destination ../../.. || true
+
+      - name: Verify Core Tarball Contains Hotfix Features
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tarball="patchwright-core-${version}.tgz"
+          test -f "$tarball"
+          bundle=$(tar -xOf "$tarball" package/lib/coreBundle.js)
+          for marker in patchwrightAutoInstallSystemBrowser patchwrightSystemBrowserCandidates _applySystemStealthOverride fingerprintingV2 realFullVersion PATCHWRIGHT_BINARY PATCHWRIGHT_WEBRTC_POLICY moveHuman; do
+            echo "$bundle" | grep -q "$marker" || { echo "Missing feature marker: $marker"; exit 1; }
+          done
+          echo "All feature markers present in ${tarball}."
+
+      - name: Publish Patchwright-Core with pw dist-tag
+        if: ${{ github.event.inputs.npm_publish == 'true' || github.event.inputs.npm_publish == true }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tarball="patchwright-core-${version}.tgz"
+          if npm view "patchwright-core@${version}" version >/dev/null 2>&1; then
+            echo "Skipping: patchwright-core@${version} already published."
+          else
+            npm publish "$tarball" --access=public --tag pw
+          fi
+
+      - name: Create GitHub Release
+        if: ${{ (github.event.inputs.create_github_release == 'true' || github.event.inputs.create_github_release == true) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          version="${RELEASE_VERSION}"
+          if gh release view "v${version}" >/dev/null 2>&1; then
+            gh release upload "v${version}" "patchwright-core-${version}.tgz" --clobber
+          else
+            gh release create "v${version}" \
+              --title "Patchwright ${version}" \
+              --notes "Hotfix release built from upstream Playwright ${{ github.event.inputs.playwright_tag }}. Install: \`npm i https://github.com/${GITHUB_REPOSITORY}/releases/download/v${version}/patchwright-core-${version}.tgz\`" \
+              "patchwright-core-${version}.tgz"
+          fi
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: patchwright-core-${{ steps.version.outputs.version }}
+          path: patchwright-core-*.tgz
+          if-no-files-found: error

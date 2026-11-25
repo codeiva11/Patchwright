@@ -74,6 +74,9 @@ export function rebrandToPatchwright() {
 		if (fs.existsSync(corePkgPath)) {
 			const pkg = JSON.parse(fs.readFileSync(corePkgPath, "utf8"));
 			pkg.name = "patchwright-core";
+			// PATCHWRIGHT_VERSION lets a build be re-released while the upstream Playwright
+			// version is unchanged (e.g. 1.65.2-pw.1 for a fixed build against Playwright 1.65.1).
+			if (process.env.PATCHWRIGHT_VERSION) pkg.version = process.env.PATCHWRIGHT_VERSION;
 			pkg.description = "A high-level API to automate web browsers with undetectable patches.";
 			if (pkg.bin) {
 				const binScript = pkg.bin.patchright || pkg.bin.playwright || pkg.bin["patchwright-core"] || "./cli.js";
@@ -93,6 +96,7 @@ export function rebrandToPatchwright() {
 			const pkg = JSON.parse(fs.readFileSync(mainPkgPath, "utf8"));
 			pkg.name = "patchwright";
 			pkg.description = "Undetected and patched version of Playwright testing and automation framework.";
+			if (process.env.PATCHWRIGHT_VERSION) pkg.version = process.env.PATCHWRIGHT_VERSION;
 			if (pkg.bin) {
 				const binScript = pkg.bin.patchright || pkg.bin.playwright || "./cli.js";
 				pkg.bin = { patchwright: binScript };
