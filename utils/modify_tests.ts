@@ -246,6 +246,19 @@ function applyPatchwrightWorkarounds(sourceFile: SourceFile, relativePath: strin
 			break;
 		}
 
+		case "tests/page/frame-evaluate.spec.ts": {
+			// FR-008: with a real system Chrome (not the pinned Chrome-for-Testing build
+			// upstream CI uses), the refused cross-frame element-handle adoption can
+			// surface as an execution-context teardown instead of the handle-adoption
+			// message. Both mean cross-frame scripting is refused, which is what the
+			// test verifies.
+			replaceOnce(
+				"expect(error.message).toContain('Unable to adopt element handle from a different document');",
+				"expect(['Unable to adopt element handle from a different document', 'Execution context was destroyed'].some(m => error.message.includes(m)));",
+			);
+			break;
+		}
+
 		case "tests/library/popup.spec.ts": {
 			// Ensure all test callbacks in this file have 'server' in their fixtures
 			editor.replace(/async \(\{([^}]*page[^}]*)\}\) => \{/g, (match: string, inside: string) => {
