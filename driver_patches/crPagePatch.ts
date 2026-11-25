@@ -15,6 +15,7 @@ export function patchCRPage(project: Project) {
 
 	// ------- CRPage Class -------
 	const crPageClass = crPageSourceFile.getClassOrThrow("CRPage");
+	crPageClass.addProperty({ name: "_consoleEnabled", type: "boolean", initializer: "false" });
 	crPageClass.addProperty({
 		name: "_reportAsNewPromise",
 		type: "Promise<void> | undefined",
@@ -142,6 +143,13 @@ export function patchCRPage(project: Project) {
 	const initializeFrameSessionMethodBody = initializeFrameSessionMethod
 		.getBodyOrThrow()
 		.asKindOrThrow(SyntaxKind.Block);
+	const finalPromisesAwait = assertDefined(
+		initializeFrameSessionMethodBody.getStatements().find(statement => statement.getText() === "await Promise.all(promises);"),
+	);
+	initializeFrameSessionMethodBody.insertStatements(
+		finalPromisesAwait.getChildIndex() + 1,
+		"if (this._crPage._consoleEnabled)\n      await this._crPage.enableConsole();",
+	);
 	initializeFrameSessionMethod.insertStatements(0, `
 		// Page.enable can immediately emit a dialog for a newly opened popup, so handle it before enabling.
 		let initializingDialogs = this._isMainFrame();

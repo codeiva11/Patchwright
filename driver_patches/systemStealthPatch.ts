@@ -223,7 +223,7 @@ export function patchLazyConsole(project: Project) {
 		text = replaceRequired(
 			text,
 			"  async bringToFront(): Promise<void> {\n    await this._mainFrameSession._client.send('Page.bringToFront');\n  }\n",
-			"  async bringToFront(): Promise<void> {\n    await this._mainFrameSession._client.send('Page.bringToFront');\n  }\n\n  async enableConsole(): Promise<void> {\n    await Promise.all([...this._sessions.values()].map(async session => {\n      await session._client.send('Log.enable').catch(() => { });\n      await session._client.send('Runtime.enable').catch(() => { });\n    }));\n  }\n",
+			"  async bringToFront(): Promise<void> {\n    await this._mainFrameSession._client.send('Page.bringToFront');\n  }\n\n  async enableConsole(): Promise<void> {\n    this._consoleEnabled = true;\n    await Promise.all([...this._sessions.values()].map(async session => {\n      await session._client.send('Log.enable').catch(() => { });\n      await session._client.send('Runtime.enable').catch(() => { });\n    }));\n  }\n",
 			"CRPage.enableConsole",
 		);
 		text = replaceRequired(text, "      this._client.send('Log.enable', {}),\n", "", "CRPage startup Log.enable");

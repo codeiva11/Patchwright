@@ -331,6 +331,10 @@ const FIXME_TARGETS: Partial<Record<string, FixmeReasonByTitle>> = {
 	]),
 	"tests/page/page-add-script-tag.spec.ts": new Map([
 		["should include sourceURL when path is provided", "Patchwright removes sourceURL-style script wrapping for stealth, so stack source paths differ."],
+		["should throw when added with content to the CSP page", "Patchwright intentionally relaxes CSP restrictions for injected scripts."],
+	]),
+	"tests/page/page-event-popup.spec.ts": new Map([
+		["should be able to capture alert", "Patchwright preserves Chrome's native popup blocker instead of passing --disable-popup-blocking."],
 	]),
 	"tests/page/page-goto.spec.ts": new Map([
 		[
