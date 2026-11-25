@@ -128,8 +128,12 @@ try {
   // 2) Launch flags: read the browser process command line via its unique marker arg.
   let cmdline = '';
   try {
-    const powershell = `Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'chrome*' -and $_.CommandLine -like '*${marker}*' } | Select-Object -First 1 -ExpandProperty CommandLine`;
-    cmdline = execSync(`powershell -NoProfile -Command "${powershell}"`, { encoding: 'utf8' });
+    if (process.platform === 'win32') {
+      const powershell = `Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'chrome*' -and $_.CommandLine -like '*${marker}*' } | Select-Object -First 1 -ExpandProperty CommandLine`;
+      cmdline = execSync(`powershell -NoProfile -Command "${powershell}"`, { encoding: 'utf8' });
+    } else {
+      cmdline = execSync(`ps -eo args= | grep -F -- ${marker} | head -n 1`, { encoding: 'utf8' });
+    }
   } catch {
     cmdline = '';
   }
