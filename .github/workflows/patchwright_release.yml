@@ -465,7 +465,7 @@ jobs:
           wrapper_tarball="patchwright-${PLAYWRIGHT_VERSION}.tgz"
           test -f "$core_tarball" || core_tarball=$(ls patchwright-core-*.tgz 2>/dev/null | head -1 || true)
           test -n "$core_tarball" || { echo "No patchwright-core tarball found"; exit 1; }
-          notes="This is an automatic deployment in response to a new release of [microsoft/playwright](https://github.com/microsoft/playwright). The original release can be seen [here](https://github.com/microsoft/playwright/releases/tag/${PLAYWRIGHT_VERSION}). If this exact version already exists on npm, install this (possibly newer/fixed) build from GitHub: npm i https://github.com/${GITHUB_REPOSITORY}/releases/download/${PLAYWRIGHT_VERSION}/${core_tarball}"
+          notes="This is an automatic deployment in response to a new release of [microsoft/playwright](https://github.com/microsoft/playwright). The original release can be seen [here](https://github.com/microsoft/playwright/releases/tag/${PLAYWRIGHT_VERSION}). Build provenance: commit ${GITHUB_SHA}. If this exact version already exists on npm, install this (possibly newer/fixed) build from GitHub: npm i https://github.com/${GITHUB_REPOSITORY}/releases/download/${PLAYWRIGHT_VERSION}/${core_tarball}"
           if gh release view "$PLAYWRIGHT_VERSION" >/dev/null 2>&1; then
             gh release upload "$PLAYWRIGHT_VERSION" "$core_tarball" --clobber
             [ -f "$wrapper_tarball" ] && gh release upload "$PLAYWRIGHT_VERSION" "$wrapper_tarball" --clobber
@@ -476,3 +476,15 @@ jobs:
               --notes "$notes" \
               "$core_tarball" $([ -f "$wrapper_tarball" ] && echo "$wrapper_tarball")
           fi
+
+      - name: Attest Build Provenance (GitHub assets)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'patchwright-core-*.tgz'
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: patchwright-tarballs
+          path: 'patchwright-*.tgz'
+          if-no-files-found: error

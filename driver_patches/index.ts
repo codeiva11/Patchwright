@@ -33,6 +33,7 @@ export * from "./screenshotterPatch.ts";
 export * from "./snapshotterInjectedPatch.ts";
 export * from "./snapshotterPatch.ts";
 export * from "./systemBrowserPatch.ts";
+export * from "./xvfbPatch.ts";
 export * from "./systemStealthPatch.ts";
 export * from "./tracingPatch.ts";
 export * from "./utilityScriptPatch.ts";

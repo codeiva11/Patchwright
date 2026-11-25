@@ -26,6 +26,31 @@ export function patchSystemStealth(project: Project) {
 		isAsync: true,
 	});
 	const stealthMethod = frameSessionClass.getMethodOrThrow("_applySystemStealthOverride");
+	// -- _initializeWorker Method: navigator.brave deletion in worker realms --
+	// Brave exposes navigator.brave inside dedicated workers too, and context/page
+	// init scripts do not run in worker realms. A detector can fingerprint Brave
+	// by checking navigator.brave inside a worker, so delete it there as well.
+	// The worker session is created with waitForDebuggerOnStart, so the deletion
+	// runs before the worker's own scripts execute.
+	const initializeWorkerMethod = frameSessionClass.getMethodOrThrow("_initializeWorker");
+	const workerSessionsSet = assertDefined(
+		initializeWorkerMethod
+			.getDescendantsOfKind(SyntaxKind.ExpressionStatement)
+			.find(statement => statement.getText().includes("this._workerSessions.set(event.sessionId, session);")),
+		"worker sessions map assignment",
+	);
+	const workerSessionsBlock = workerSessionsSet.getParentIfKindOrThrow(SyntaxKind.Block);
+	workerSessionsBlock.insertStatements(
+		workerSessionsBlock.getStatements().indexOf(workerSessionsSet) + 1,
+		`
+		const braveWorkerOptions = this._crPage._browserContext._browser.options;
+		if (/brave/i.test(braveWorkerOptions.customExecutablePath || '') || (braveWorkerOptions.channel || '').startsWith('brave')) {
+			session._sendMayFail('Runtime.evaluate', {
+				expression: '(function(){ try { Reflect.deleteProperty(navigator, "brave"); } catch (e) { } try { var pwProto = Object.getPrototypeOf(navigator); if (pwProto) Reflect.deleteProperty(pwProto, "brave"); } catch (e) { } try { if (typeof Navigator !== "undefined") Reflect.deleteProperty(Navigator.prototype, "brave"); } catch (e) { } })();',
+			});
+		}
+	`,
+	);
 	stealthMethod.setBodyText(`
 		try {
 			if (process.env.PATCHWRIGHT_SYSTEM_STEALTH === '0')
@@ -66,10 +91,10 @@ export function patchSystemStealth(project: Project) {
 			try {
 				const exe = browserOptions.executablePath || browserOptions.customExecutablePath;
 				if (exe) {
-					const out = require('child_process').execFileSync(exe, ['--version'], { timeout: 5000, windowsHide: true }).toString();
-					const m = out.match(/(\\d+\\.\\d+\\.\\d+\\.\\d+)/);
-					if (m)
-						realFullVersion = m[1];
+					// Cached per executable: spawning --version on every context adds
+					// latency for multi-context runs. The binary cannot change while the
+					// driver process is alive, so a process-lifetime cache is safe.
+					realFullVersion = patchwrightCachedRealFullVersion(exe);
 				}
 			} catch { }
 			const nativeChromiumFull = (nativeFullVersionList.find(entry => entry.brand === 'Chromium') || {}).version || '';
@@ -135,7 +160,7 @@ export function patchSystemStealth(project: Project) {
 			// through navigator.brave.isBrave, which then contradicts the aligned Chrome
 			// brand list. Shadow the artifact for every document of this context.
 			if (isBraveEngine) {
-				const artifactScript = '(function(){ try { Reflect.deleteProperty(navigator, "brave"); } catch (e) { } try { Reflect.deleteProperty(Navigator.prototype, "brave"); } catch (e) { } })();';
+				const artifactScript = '(function(){ try { Reflect.deleteProperty(navigator, "brave"); } catch (e) { } try { var pwProto = Object.getPrototypeOf(navigator); if (pwProto) Reflect.deleteProperty(pwProto, "brave"); } catch (e) { } try { if (typeof Navigator !== "undefined") Reflect.deleteProperty(Navigator.prototype, "brave"); } catch (e) { } })();';
 				const context = this._crPage._browserContext as any;
 				if (!context._patchwrightBraveStealthApplied) {
 					context._patchwrightBraveStealthApplied = true;
@@ -171,4 +196,25 @@ export function patchSystemStealth(project: Project) {
 				promises.push(this._applySystemStealthOverride());
 		`,
 	);
+
+	// Module-level cache for the browser binary's real full version. Spawning
+	// --version on every FrameSession/context adds latency for multi-context
+	// runs; the binary cannot change while the driver process is alive, so a
+	// process-lifetime cache is safe.
+	const patchwrightFullVersionCache = new Map<string, string>();
+	function patchwrightCachedRealFullVersion(exe: string): string {
+		const cached = patchwrightFullVersionCache.get(exe);
+		if (cached)
+			return cached;
+		try {
+			const out = require('child_process').execFileSync(exe, ['--version'], { timeout: 5000, windowsHide: true }).toString();
+			const m = out.match(/(\d+\.\d+\.\d+\.\d+)/);
+			const version = m ? m[1] : '';
+			patchwrightFullVersionCache.set(exe, version);
+			return version;
+		} catch {
+			patchwrightFullVersionCache.set(exe, '');
+			return '';
+		}
+	}
 }

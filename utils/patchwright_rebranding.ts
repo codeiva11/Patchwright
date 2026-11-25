@@ -79,8 +79,11 @@ export function rebrandToPatchwright() {
 			if (process.env.PATCHWRIGHT_VERSION) pkg.version = process.env.PATCHWRIGHT_VERSION;
 			pkg.description = "A high-level API to automate web browsers with undetectable patches.";
 			if (pkg.bin) {
+				// Distinct bin names: the patchwright wrapper owns `patchwright` (test-runner),
+				// the core owns `patchwright-core` (driver CLI). Same-named bins clobber each
+				// other when both packages are installed in one project.
 				const binScript = pkg.bin.patchright || pkg.bin.playwright || pkg.bin["patchwright-core"] || "./cli.js";
-				pkg.bin = { patchwright: binScript };
+				pkg.bin = { "patchwright-core": binScript };
 			}
 			fs.writeFileSync(corePkgPath, JSON.stringify(pkg, null, 2), "utf8");
 		}

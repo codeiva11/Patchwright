@@ -81,15 +81,28 @@ jobs:
           cd playwright
           npx playwright install-deps
 
-      - name: Install Chromium and Chrome Browsers
+      # Patchwright never downloads bundled Chrome-for-Testing builds: CI installs the
+      # official Google Chrome deb (GPG-verified) so the tests run a real system browser,
+      # exactly like production launches do.
+      - name: Install System Google Chrome
         run: |
-          cd playwright
-          npx playwright install chromium chrome
+          curl -fsSL -o /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y /tmp/google-chrome-stable_current_amd64.deb
 
       - name: Run Detection Smoke Test
         id: test_detection
         continue-on-error: ${{ github.event_name == 'workflow_call' }}
         run: xvfb-run -a node utils/detection_smoke_test.mjs
+
+      - name: Run Runtime Smoke Test (new core patches)
+        id: test_runtime
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: xvfb-run -a node utils/custom_tests/runtime_smoke_test.mjs
+
+      - name: Run TLS/JA4 Alignment Check
+        id: test_tls
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: xvfb-run -a node utils/custom_tests/tls_ja4_check.mjs
 
       - name: Modify Tests for Patchwright
         run: npx tsx utils/modify_tests.ts

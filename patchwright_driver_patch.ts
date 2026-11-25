@@ -6,6 +6,24 @@ import * as patches from "./driver_patches/index.ts";
 import * as clientPatches from "./patchwright-nodejs/index.ts";
 import { formatFiles } from "./utils/format-indentation.ts";
 
+// Patchwright: self-healing patch pipeline. The patches are only idempotent against a
+// vanilla Playwright tree (they fail loudly when their already-patched text is missing),
+// so reset the patched trees before applying. Set PATCHWRIGHT_KEEP_WORKTREE=1 to skip
+// (e.g. when iterating on a single patch against a partially patched tree).
+import { execFileSync } from "node:child_process";
+if (process.env.PATCHWRIGHT_KEEP_WORKTREE !== '1') {
+	try {
+		// The script is always run from the playwright/ checkout, so resolve its
+		// git toplevel instead of assuming a repository-relative path.
+		const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+		execFileSync('git', ['-C', toplevel, 'checkout', 'HEAD', '--', 'packages/', 'utils/'], { stdio: 'pipe' });
+		execFileSync('git', ['-C', toplevel, 'clean', '-fdx', '-e', 'node_modules'], { stdio: 'pipe' });
+		console.log('[patchwright_driver_patch] reset playwright/ to vanilla (packages/ + utils/).');
+	} catch (error) {
+		console.log('[patchwright_driver_patch] worktree reset skipped (not a git checkout?):', String(error).split('\n')[0]);
+	}
+}
+
 const project = new Project({
 	manipulationSettings: {
 		indentationText: IndentationText.TwoSpaces,
@@ -114,6 +132,13 @@ patches.patchBrowserType(project);
 // when no official browser is installed)
 // -----------------------------------
 patches.patchAutoInstall(project);
+
+// -----------------------------------
+// server/browserType.ts
+// (auto Xvfb display for headful
+// launches on display-less Linux)
+// -----------------------------------
+patches.patchXvfb(project);
 
 // -----------------------------------
 // server/chromium/chromiumSwitches.ts

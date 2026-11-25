@@ -211,59 +211,6 @@ original instructive error is thrown.
 
 ---
 
-## 🚀 Quick Start for Users
-
-### 1. Installation
-
-Install Patchwright — **no browser download is needed or performed**. Patchwright
-never bundles or downloads Chrome-for-Testing; `chromium.launch()` automatically
-resolves an official system browser (Brave → Chrome → Chromium) on
-Windows, Linux and macOS (any architecture), plus managed patched binaries via
-`PATCHWRIGHT_BINARY` / `PATCHWRIGHT_EXECUTABLE_PATH` / `~/.patchwright/`:
-
-```bash
-# Install Patchwright
-npm install patchwright
-```
-
-> ⚠️ Do **not** install `playwright-chromium` / `@playwright/browser-chromium`
-> (or run any `install` browser command) — those download Chrome-for-Testing
-> archives that Patchwright will never use. No browser download is needed;
-> Patchwright resolves official system browsers automatically.
-
-*(Optional: for the core-only API)*
-```bash
-npm install patchwright-core
-```
-
-### 2. Usage Example (JavaScript / TypeScript)
-
-Use `patchwright` as a 100% drop-in replacement for `playwright`:
-
-```javascript
-import { chromium } from 'patchwright';
-
-async function run() {
-  const browser = await chromium.launch({
-    headless: false // Set to true for headless automation
-  });
-
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
-  // Test your bot detection status
-  await page.goto('https://bot.sannysoft.com/');
-  console.log('Page loaded undetected!');
-
-  await page.screenshot({ path: 'detection_result.png' });
-  await browser.close();
-}
-
-run();
-```
-
----
-
 ## 💻 Local Development & Setup Guide
 
 If you are developing, modifying patches, or building Patchwright from source:
@@ -416,7 +363,7 @@ re-running the pipeline on the new source — no manual code edits inside the Pl
 ```bash
 cd playwright
 git fetch && git checkout <new-version-tag>
-git checkout HEAD -- packages/ utils/ && git clean -fdx -e node_modules   # always start from a clean tree (utils/build.js is patched too)
+git checkout HEAD -- packages/ && git clean -fdx -e node_modules   # always start from a clean tree
 cd ..
 npx tsx patchwright_driver_patch.ts                # applies ALL AST patches (driver + client)
 npm --prefix playwright run build && npm --prefix playwright run build   # run twice (channel-gen race)
@@ -435,7 +382,7 @@ Behavior on upstream changes:
   that one patch file while all other features keep applying untouched. This is by design —
   a patch that silently no-ops would be an undetectable security regression.
 * **Reproducible builds.** Each run starts from vanilla Playwright (`git checkout HEAD --
-  packages/ utils/ && git clean`), so the output is deterministic for a given (patch set, version) pair.
+  packages/ && git clean`), so the output is deterministic for a given (patch set, version) pair.
 * **Post-upgrade verification:** `npm run typecheck` (root),
   `node utils/custom_tests/runtime_smoke_test.mjs`, `node utils/custom_tests/tls_ja4_check.mjs`,
   and the live-detector suite.
