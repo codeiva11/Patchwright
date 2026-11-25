@@ -51,7 +51,9 @@ try {
   const brands = result.hev?.brands?.map(item => item.brand) || [];
   if (!brands.includes('Google Chrome')) failures.push('worker brands missing Google Chrome');
   if (!result.hev?.fullVersionList?.length) failures.push('worker fullVersionList empty');
-  if (!result.hev?.platformVersion) failures.push('worker platformVersion empty');
+  // Linux Chrome natively reports an empty platformVersion; only require it on
+  // platforms where Chromium exposes one.
+  if (process.platform !== 'linux' && !result.hev?.platformVersion) failures.push('worker platformVersion empty');
   if (failures.length) {
     console.error('FAIL  service worker identity');
     for (const failure of failures) console.error('  - ' + failure);

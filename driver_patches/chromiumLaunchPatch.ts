@@ -32,6 +32,17 @@ export function patchChromiumLaunch(project: Project) {
 
 	// TLS/JA4 alignment is independent of the proxy and applies to every launch.
 	const methodBlock = proxyIfStatement.getParentIfKindOrThrow(SyntaxKind.Block);
+	// Headless Chromium 158 hangs service-worker history navigations when BFCache
+	// is enabled (the upstream driver disables it). Keep native BFCache in
+	// headful Chrome, where it is not an automation signal and does not hang.
+	const chromeArgumentsStatement = assertDefined(
+		methodBlock.getStatements().find(statement => statement.getText().startsWith('const chromeArguments = [...chromiumSwitches()]')),
+		'chromiumArguments declaration',
+	);
+	methodBlock.insertStatements(chromeArgumentsStatement.getChildIndex() + 1, `
+		if ((options as any).headless !== false)
+			chromeArguments.push('--disable-back-forward-cache');
+	`);
 	methodBlock.insertStatements(
 		methodBlock.getStatements().indexOf(proxyIfStatement) + 1,
 		`
