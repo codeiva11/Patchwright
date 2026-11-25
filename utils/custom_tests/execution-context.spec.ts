@@ -16,7 +16,7 @@
 
 import { expect, contextTest as it } from '../../config/browserTest';
 
-it('should keep isolated and main execution contexts separate across APIs @patchwright', async ({ page, server }) => {
+it('should expose page APIs in the main execution context @patchwright', async ({ page, server }) => {
   server.setRoute('/patchwright-context.html', (_request, response) => {
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
     response.end('<!doctype html><button id="target">target</button><iframe src="/patchwright-context-frame.html"></iframe><script>window.mainMarker = "main"</script>');
@@ -27,24 +27,26 @@ it('should keep isolated and main execution contexts separate across APIs @patch
   });
 
   await page.goto(server.PREFIX + '/patchwright-context.html');
-  expect(await page.evaluate(() => window['mainMarker'])).toBeUndefined();
+  // Patchwright runs page JavaScript in the main world so that no isolated-world
+  // marker is observable to page scripts.
+  expect(await page.evaluate(() => window['mainMarker'])).toBe('main');
   expect(await page.evaluate(() => window['mainMarker'], undefined, undefined, false)).toBe('main');
 
   await page.evaluate(() => window['isolatedMarker'] = 'isolated');
-  expect(await page.evaluate(() => window['isolatedMarker'], undefined, undefined, false)).toBeUndefined();
+  expect(await page.evaluate(() => window['isolatedMarker'], undefined, undefined, false)).toBe('isolated');
 
   const frame = page.frames()[1];
-  expect(await frame.evaluate(() => window['frameMarker'])).toBeUndefined();
+  expect(await frame.evaluate(() => window['frameMarker'])).toBe('frame-main');
   expect(await frame.evaluate(() => window['frameMarker'], undefined, undefined, false)).toBe('frame-main');
 
   const target = page.locator('#target');
-  expect(await target.evaluate(() => window['mainMarker'])).toBeUndefined();
+  expect(await target.evaluate(() => window['mainMarker'])).toBe('main');
   expect(await target.evaluate(() => window['mainMarker'], undefined, undefined, false)).toBe('main');
   expect(await page.locator('button').evaluateAll(() => window['mainMarker'], undefined, false)).toBe('main');
 
   await page.reload();
   expect(await page.evaluate(() => window['mainMarker'], undefined, undefined, false)).toBe('main');
-  expect(await page.evaluate(() => window['mainMarker'])).toBeUndefined();
+  expect(await page.evaluate(() => window['mainMarker'])).toBe('main');
 });
 
 it('should preserve main-world handles and accept context selection for workers @patchwright', async ({ page, server }) => {

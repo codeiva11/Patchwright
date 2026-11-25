@@ -704,6 +704,45 @@ function logReport(report: ModifyTestsReport): void {
 	}
 }
 
+function applyBrowserTestHarnessFix(): void {
+	const file = path.join(testsRoot, "config", "browserTest.ts");
+	let text = fs.readFileSync(file, "utf8");
+	const from = "const isShell = channel === 'chromium-headless-shell' || (!channel && headless);";
+	const to = "// Patchwright uses installed system Chrome: its new headless mode reports\n    // authentication failures as HTTP responses, not as net::ERR_* failures.\n    const isShell = channel === 'chromium-headless-shell';";
+	if (!text.includes(from)) {
+		if (text.includes("const isShell = channel === 'chromium-headless-shell';"))
+			return;
+		console.error("[modify_tests] Missing isHeadlessShell fixture text");
+		return;
+	}
+	text = text.replace(from, to);
+	fs.writeFileSync(file, text);
+}
+
+function applyKnownEnvironmentFixes(): void {
+	const file = path.join(testsRoot, "library", "download.spec.ts");
+	if (!fs.existsSync(file))
+		return;
+	let text = fs.readFileSync(file, "utf8");
+	const from = "  it.skip(browserName === 'chromium' && !isHeadlessShell, 'We expect PDF Viewer to open up in headed Chromium');";
+	const to = "  // Patchwright runs installed system Chrome in new headless mode, where an inline PDF navigation does not emit a download event.\n  it.fixme(browserName === 'chromium', 'Inline PDF download is not observable in system Chrome new headless');";
+	if (text.includes(from)) {
+		text = text.replace(from, to);
+		fs.writeFileSync(file, text);
+	}
+
+	const extensionsFile = path.join(testsRoot, "library", "chromium", "extensions.spec.ts");
+	if (!fs.existsSync(extensionsFile))
+		return;
+	let extensionsText = fs.readFileSync(extensionsFile, "utf8");
+	const extensionsFrom = "  it.skip(({ channel }) => channel?.startsWith('chrome'), '--load-extension is not supported in Chrome anymore. https://groups.google.com/a/chromium.org/g/chromium-extensions/c/1-g8EFx2BBY/m/S0ET5wPjCAAJ');";
+	const extensionsTo = "  it.skip(() => true, 'Patchwright launches installed Google Chrome, which no longer supports --load-extension');";
+	if (extensionsText.includes(extensionsFrom)) {
+		extensionsText = extensionsText.replace(extensionsFrom, extensionsTo);
+		fs.writeFileSync(extensionsFile, extensionsText);
+	}
+}
+
 async function main(): Promise<void> {
 	assertPrerequisites();
 
@@ -738,7 +777,12 @@ async function main(): Promise<void> {
 		addFileModification(report, relativePath, modifyTestFile(sourceFile, relativePath));
 	}
 
-	if (!dryRun) await project.save();
+
+	if (!dryRun) {
+		await project.save();
+		applyBrowserTestHarnessFix();
+		applyKnownEnvironmentFixes();
+	}
 	injectCustomTests(customTests);
 
 	logReport(report);

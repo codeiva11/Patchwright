@@ -74,7 +74,9 @@ jobs:
       - name: Build Patchwright Driver
         run: |
           cd playwright
-          npm run build
+          # The first build bootstraps generated channel files; rerun once if that
+          # bootstrap step races the rest of the build.
+          npm run build || npm run build
 
       - name: Install Browser Dependencies
         run: |
@@ -88,6 +90,11 @@ jobs:
         run: |
           curl -fsSL -o /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo apt-get install -y /tmp/google-chrome-stable_current_amd64.deb
+
+      - name: Install FFmpeg for Video Tests
+        run: |
+          cd playwright
+          npx playwright install ffmpeg
 
       - name: Run Detection Smoke Test
         id: test_detection
@@ -130,7 +137,7 @@ jobs:
         id: set_test_outcome
         if: always()
         run: |
-          if [ "${{ steps.test_detection.outcome }}" = "failure" ] || [ "${{ steps.test_page.outcome }}" = "failure" ] || [ "${{ steps.test_library.outcome }}" = "failure" ]; then
+          if [ "${{ steps.test_detection.outcome }}" = "failure" ] || [ "${{ steps.test_runtime.outcome }}" = "failure" ] || [ "${{ steps.test_service_worker.outcome }}" = "failure" ] || [ "${{ steps.test_tls.outcome }}" = "failure" ] || [ "${{ steps.test_page.outcome }}" = "failure" ] || [ "${{ steps.test_library.outcome }}" = "failure" ]; then
             echo "test_outcome=failure" >> "$GITHUB_OUTPUT"
             if [ "${{ github.event_name }}" = "workflow_call" ]; then
               echo "Tests failed under workflow_call, exiting with failure code."

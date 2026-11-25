@@ -18,6 +18,12 @@ export function patchSystemStealth(project: Project) {
 		try {
 			if (process.env.PATCHWRIGHT_SYSTEM_STEALTH === '0')
 				return;
+			// An explicit context identity, launch argument, or locale belongs to the
+			// caller; applying the native identity here would overwrite it.
+			const contextOptions = this._crPage._browserContext._options;
+			const launchArguments = this._crPage._browserContext._browser.options.originalLaunchOptions.args || [];
+			if (contextOptions.userAgent || contextOptions.locale || launchArguments.some((arg: string) => arg.startsWith('--user-agent')))
+				return;
 			const browser = this._crPage._browserContext._browser;
 			const native = await patchwrightFallbackMetadata(browser);
 			if (!native?.ua || !native?.hev || !Array.isArray(native.hev.brands) || !native.hev.brands.length)

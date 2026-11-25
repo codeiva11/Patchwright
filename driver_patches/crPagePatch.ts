@@ -153,10 +153,12 @@ export function patchCRPage(project: Project) {
 	initializeFrameSessionMethod.insertStatements(0, `
 		// Page.enable can immediately emit a dialog for a newly opened popup, so handle it before enabling.
 		let initializingDialogs = this._isMainFrame();
+		let initializingDialogOpened = false;
 		if (initializingDialogs)
 			this._eventListeners.push(eventsHelper.addEventListener(this._client, 'Page.javascriptDialogOpening', (event: any) => {
 				if (!initializingDialogs)
 					return;
+				initializingDialogOpened = true;
 				this._firstNonInitialNavigationCommittedFulfill();
 				this._page.frameManager.createDummyMainFrameIfNeeded();
 				this._crPage._reportAsNew().then(() => this._onDialog(event));
@@ -178,6 +180,12 @@ export function patchCRPage(project: Project) {
 		`
 		if (this._isMainFrame() && !this._crPage._opener)
 			await Promise.all(promises);
+		// A popup can open a dialog before its initial frame commit completes. Report it
+		// early so the dialog event and popup event are not blocked by that commit.
+		if (this._crPage._opener && initializingDialogOpened) {
+			this._crPage._page.frameManager.createDummyMainFrameIfNeeded();
+			this._crPage._reportAsNew().catch(() => {});
+		}
 	`,
 	);
 	// Find the initializer array
@@ -310,6 +318,10 @@ export function patchCRPage(project: Project) {
 		this._exposedBindingNames.push(binding.name);
 		this._exposedBindingScripts.push(binding.source);
 
+		// Runtime.bindingCalled events are delivered only while the Runtime domain is
+		// enabled. Pages without bindings keep Runtime disabled for stealth.
+		await this._client.send('Runtime.enable').catch(() => {});
+
 		// Install binding in all existing execution contexts.
 		const contextIds = Array.from(this._contextIdToContext.keys());
 		await Promise.all([
@@ -425,7 +437,7 @@ export function patchCRPage(project: Project) {
 				statement.getText().includes("worldName = 'utility'"),
 		)
 		.forEach((statement, index) => {
-			if (index === 0) statement.replaceWithText("let worldName = contextPayload.name;");
+			if (index === 0) statement.replaceWithText("let worldName = contextPayload.name || (contextPayload.auxData?.isDefault ? 'main' : '');");
 			else statement.remove();
 		});
 	// Guard _contextCreated to only register known worlds ('main' or 'utility')

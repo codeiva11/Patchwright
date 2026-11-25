@@ -31,6 +31,7 @@ export * from "./networkPatch.ts";
 export * from "./pageBindingPatch.ts";
 export * from "./pageDispatcherPatch.ts";
 export * from "./pagePatch.ts";
+export * from "./pageReportPatch.ts";
 export * from "./recorderPatch.ts";
 export * from "./screenshotterPatch.ts";
 export * from "./snapshotterInjectedPatch.ts";

@@ -28,7 +28,6 @@ export function patchChromiumSwitches(project: Project) {
 	// Patchwright defined switches to disable
 	const switchesToDisable = [
 		"assistantMode ? '' : '--enable-automation'",
-		"'--disable-popup-blocking'",
 		"'--disable-component-update'",
 		"'--disable-default-apps'",
 		"'--disable-extensions'",
@@ -49,4 +48,10 @@ export function patchChromiumSwitches(project: Project) {
 
 	// Add custom switches to the array
 	chromiumSwitchesArray.addElement(`'--disable-blink-features=AutomationControlled'`);
+
+	// Component extensions create background service-worker targets that are
+	// visible through CDP and interfere with automation. Disable only component
+	// extensions; user-installed extensions remain supported.
+	chromiumSwitchesArray.addElement(`'--disable-default-apps'`);
+	chromiumSwitchesArray.addElement(`'--disable-component-extensions-with-background-pages'`);
 }
