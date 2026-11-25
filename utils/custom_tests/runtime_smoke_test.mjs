@@ -1,10 +1,8 @@
 // Patchwright runtime smoke test for the new core patches.
 // Notes:
-//  - Patchwright injects init scripts through its leak-free route mechanism, which only
-//    triggers on http(s) navigations - so the test pages are served over a local http server.
-//  - page.evaluate runs in an isolated world by default (Patchwright's anti-leak design).
-//    Bot detectors read the MAIN world, so the fingerprint assertions use Patchwright's
-//    extended `isolatedContext: false` evaluate option, exactly like a real page script.
+//  - page.evaluate runs in the MAIN world by default (Playwright-compatible).
+//    The fourth `isolatedContext` argument still opts into the utility world.
+//  - Fingerprint assertions read the MAIN world, exactly like a real page script.
 import http from 'node:http';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -89,6 +87,44 @@ try {
   const perm = await main(async () => (await navigator.permissions.query({ name: 'geolocation' })).state);
   check('Permissions API spoof (granted)', perm === 'granted', perm);
 
+  // UA + Client Hints must be native, not a guessed brand list.
+  const ua = await main(async () => ({
+    ua: navigator.userAgent,
+    brands: navigator.userAgentData ? (await navigator.userAgentData.getHighEntropyValues(['brands', 'fullVersionList'])).brands : [],
+    full: navigator.userAgentData ? (await navigator.userAgentData.getHighEntropyValues(['fullVersionList'])).fullVersionList : [],
+  }));
+  check('UA has no HeadlessChrome', !ua.ua.includes('HeadlessChrome'), ua.ua);
+  check('Client Hints brands populated', Array.isArray(ua.brands) && ua.brands.length > 0, JSON.stringify(ua.brands));
+  check('Client Hints full versions populated', Array.isArray(ua.full) && ua.full.length > 0, JSON.stringify(ua.full));
+
+  // Lazy Runtime.enable: console and pageerror must work only after a listener.
+  let consoleSeen = false;
+  let pageErrorSeen = false;
+  page.on('console', message => { if (message.text() === 'pw-console-probe') consoleSeen = true; });
+  page.on('pageerror', () => { pageErrorSeen = true; });
+  await main(() => {
+    console.log('pw-console-probe');
+    setTimeout(() => { throw new Error('pw-pageerror-probe'); }, 0);
+  });
+  await page.waitForTimeout(250);
+  check('console event after listener', consoleSeen);
+  check('pageerror event after listener', pageErrorSeen);
+
+  // exposeFunction wrapper must not expose callbacks/handles and must look native.
+  await page.exposeFunction('pwExposedProbe', () => 1);
+  const binding = await main(() => {
+    const fn = window.pwExposedProbe;
+    return {
+      keys: Object.keys(fn),
+      own: Object.getOwnPropertyNames(fn),
+      symbols: Object.getOwnPropertySymbols(fn).length,
+      source: Function.prototype.toString.call(fn),
+    };
+  });
+  check('exposeFunction has no enumerable state', binding.keys.length === 0, JSON.stringify(binding.keys));
+  check('exposeFunction exposes no symbol registry', binding.symbols === 0, String(binding.symbols));
+  check('exposeFunction looks native', binding.source.includes('[native code]') && !binding.source.includes('callbacks'), binding.source);
+
   // 2) Launch flags: read the browser process command line via its unique marker arg.
   let cmdline = '';
   try {
@@ -98,11 +134,13 @@ try {
     cmdline = '';
   }
   check('browser process found', cmdline.includes(marker), cmdline.slice(0, 120));
-  // No proxy in this test launch: WebRTC must expose only the default public interface
-  // (hides local IPs). With a proxy, the driver switches to disable_non_proxied_udp.
-  check('WebRTC leak protection flags', cmdline.includes('--webrtc-ip-handling-policy=default_public_interface_only') && cmdline.includes('--enforce-webrtc-ip-permission-check'));
+  // No proxy in this launch: leave Chromium's native WebRTC policy untouched.
+  // With a proxy, the driver adds disable_non_proxied_udp instead.
+  check('WebRTC policy is native without a proxy', !cmdline.includes('--webrtc-ip-handling-policy') && !cmdline.includes('--enforce-webrtc-ip-permission-check'));
   check('AutomationControlled blink flag', cmdline.includes('--disable-blink-features=AutomationControlled'));
   check('No --enable-automation flag', !cmdline.includes('--enable-automation'));
+  check('No forced --no-sandbox flag', !cmdline.includes('--no-sandbox'));
+  check('Native UA launch switch present', cmdline.includes('--user-agent='));
   check('Neutral temp profile name', cmdline.includes('pw_chromium_profile-') && !cmdline.includes('dev_profile-'));
 
   // 3) Human input simulation.
@@ -115,7 +153,7 @@ try {
 
   // 4) driver leak check: navigator.webdriver (main world)
   const webdriver = await main(() => navigator.webdriver);
-  check('navigator.webdriver hidden', webdriver === false || webdriver === undefined, String(webdriver));
+  check('navigator.webdriver is false', webdriver === false, String(webdriver));
 
   await browser.close();
 
@@ -133,5 +171,5 @@ try {
   try { await browser?.close(); } catch { }
   server.close();
   console.log(results.join('\n'));
-  process.exit(0);
+  process.exitCode = results.some(line => line.startsWith('FAIL') || line.startsWith('FATAL')) ? 1 : 0;
 }

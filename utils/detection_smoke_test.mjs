@@ -30,6 +30,8 @@ const pageHtml = `<!doctype html>
 const frameHtml = "<!doctype html><p>frame</p>";
 
 function evaluateInMainWorld(target, pageFunction, argument) {
+  // The fourth argument is kept explicit for clarity; the default is already
+  // the main world (Playwright-compatible).
   return target.evaluate(pageFunction, argument, undefined, false);
 }
 
@@ -46,6 +48,26 @@ function detectLeaks() {
   );
 
   return { webdriver: navigator.webdriver, globals };
+}
+
+async function detectIdentity() {
+  const highEntropy = navigator.userAgentData
+    ? await navigator.userAgentData.getHighEntropyValues(["brands", "fullVersionList"])
+    : null;
+  return {
+    userAgent: navigator.userAgent,
+    brands: highEntropy?.brands ?? [],
+    fullVersionList: highEntropy?.fullVersionList ?? [],
+  };
+}
+
+async function detectBindingWrapper() {
+  const fn = globalThis.userBinding;
+  return {
+    keys: Object.keys(fn),
+    own: Object.getOwnPropertyNames(fn),
+    source: Function.prototype.toString.call(fn),
+  };
 }
 
 async function detectRuntimeSerialization() {
@@ -65,12 +87,17 @@ async function detectRuntimeSerialization() {
 
 async function assertUndetected(target, label) {
   const { webdriver, globals } = await evaluateInMainWorld(target, detectLeaks);
-  assert.notEqual(webdriver, true, `${label}: navigator.webdriver is true`);
+  assert.equal(webdriver, false, `${label}: navigator.webdriver is not false`);
   assert.deepEqual(
     globals,
     [],
     `${label}: Playwright globals leaked: ${globals.join(", ")}`,
   );
+
+  const identity = await evaluateInMainWorld(target, detectIdentity);
+  assert(!identity.userAgent.includes("HeadlessChrome"), `${label}: HeadlessChrome in UA`);
+  assert(identity.brands.length > 0, `${label}: Client Hints brands are empty`);
+  assert(identity.fullVersionList.length > 0, `${label}: Client Hints full version list is empty`);
 
   const stackReads = await evaluateInMainWorld(
     target,
@@ -128,6 +155,28 @@ async function main() {
       await evaluateInMainWorld(page, () => globalThis.userBinding()),
       42,
     );
+    const binding = await evaluateInMainWorld(page, detectBindingWrapper);
+    assert.deepEqual(binding.keys, [], "exposeFunction exposes enumerable state");
+    assert(
+      binding.source.includes("[native code]") && !binding.source.includes("callbacks"),
+      "exposeFunction wrapper source is not native",
+    );
+
+    let consoleSeen = false;
+    let pageErrorSeen = false;
+    page.on("console", (message) => {
+      if (message.text() === "pw-console-probe") consoleSeen = true;
+    });
+    page.on("pageerror", () => {
+      pageErrorSeen = true;
+    });
+    await page.evaluate(() => {
+      console.log("pw-console-probe");
+      setTimeout(() => { throw new Error("pw-pageerror-probe"); }, 0);
+    });
+    await page.waitForTimeout(250);
+    assert(consoleSeen, "console event did not arrive after listener");
+    assert(pageErrorSeen, "pageerror event did not arrive after listener");
     await assertUndetected(page, "automated page");
 
     const frame = page
@@ -144,7 +193,7 @@ async function main() {
   } finally {
     await context?.close();
     server.close();
-    await rm(userDataDir, { recursive: true, force: true });
+    await rm(userDataDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
   }
 }
 

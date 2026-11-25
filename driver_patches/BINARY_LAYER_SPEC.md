@@ -1,9 +1,13 @@
 # Patchwright — Patched Binary Layer Specification
 
+> **Status: design document only.** This repository implements the TypeScript/AST driver
+> layer. It does not contain, build, or auto-load a patched Chromium binary. The binary
+> patch points below are proposals, not shipped features.
+
 > This document specifies the C++ / binary-level patch points that **cannot** be implemented as
 > TypeScript AST patches in `driver_patches/`. The TypeScript AST layer (this repository) handles
 > the Playwright driver; this binary layer handles the browser itself. The two layers are wired
-> together by the driver's patched-binary auto-loader (see §6).
+> together by a loader that is not implemented in this repository (see §5).
 
 ## 1. Why a binary layer at all?
 
@@ -75,15 +79,15 @@ the Chromium binary and can only be removed there:
    publish them from the Patchwright release workflow (same OIDC-provenance pipeline as the NPM
    driver package).
 
-## 5. Driver ↔ binary contract (implemented in this repository)
+## 5. Driver ↔ binary contract (driver-side resolution only; no binary shipped)
 
 The driver resolves executables in this order (see `driver_patches/browserTypePatch.ts`):
 
 1. `executablePath` launch option (user-specified; validated as before).
 2. `PATCHWRIGHT_BINARY` environment variable.
 3. `PATCHWRIGHT_EXECUTABLE_PATH` environment variable (alias).
-4. `~/.patchwright/patchwright-chromium[.exe]` — the conventional location where the
-   Patchwright binary installer places the patched build (auto-loaded when present).
+4. `~/.patchwright/patchwright-chromium[.exe]` — a conventional path the driver checks. No
+   Patchwright binary installer or auto-loader ships in this repository.
 5. Registry fallback: bundled Chromium or a system channel (`chrome`, `msedge`, `brave`,
    `vivaldi`, `opera`, `chromium-system`, ...).
 
@@ -96,6 +100,5 @@ required.
 
 Everything else in this repository: launch pipeline, switch sanitisation, WebRTC policy flags,
 Runtime/Console leak removal, isolated execution contexts, init-script route injection, human
-input simulation, proxy geo alignment and the opt-in JS fingerprint module. The binary layer is
-an enhancement, not a requirement — Patchwright remains fully functional with system browsers
+input simulation, proxy geo alignment and the opt-in JS fingerprint module. The binary layer is not implemented here; the driver remains functional with system browsers
 alone.

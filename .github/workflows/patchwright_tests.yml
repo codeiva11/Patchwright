@@ -99,6 +99,11 @@ jobs:
         continue-on-error: ${{ github.event_name == 'workflow_call' }}
         run: xvfb-run -a node utils/custom_tests/runtime_smoke_test.mjs
 
+      - name: Run Service Worker Identity Smoke Test
+        id: test_service_worker
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: xvfb-run -a node utils/custom_tests/service_worker_smoke_test.mjs
+
       - name: Run TLS/JA4 Alignment Check
         id: test_tls
         continue-on-error: ${{ github.event_name == 'workflow_call' }}

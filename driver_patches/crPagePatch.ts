@@ -339,7 +339,7 @@ export function patchCRPage(project: Project) {
 		if (!document) return
 		var query = await this._client._sendMayFail("DOM.querySelectorAll", {
 		  nodeId: document.root.nodeId,
-		  selector: "[class=" + this._crPage.initScriptTag + "]"
+		  selector: '[class="' + this._crPage.initScriptTag + '"]'
 		});
 		if (!query) return
 		for (const nodeId of query.nodeIds) await this._client._sendMayFail("DOM.removeNode", { nodeId: nodeId });
@@ -385,7 +385,7 @@ export function patchCRPage(project: Project) {
 		if (!document) return
 		var query = await this._client._sendMayFail("DOM.querySelectorAll", {
 			nodeId: document.root.nodeId,
-			selector: "[class=" + this._crPage.initScriptTag + "]"
+			selector: '[class="' + this._crPage.initScriptTag + '"]'
 		});
 		if (!query) return
 		for (const nodeId of query.nodeIds) await this._client._sendMayFail("DOM.removeNode", { nodeId: nodeId });
@@ -402,7 +402,7 @@ export function patchCRPage(project: Project) {
 	onExecutionContextCreatedMethod.insertStatements(
 		2,
 		`
-		if (contextPayload.auxData?.type === "worker") throw new Error("ExecutionContext is worker");
+		if (contextPayload.auxData?.type === "worker") return;
 	`,
 	);
 	// Replace the legacy worldName branching logic with a direct assignment from contextPayload.name.

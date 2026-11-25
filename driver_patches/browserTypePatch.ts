@@ -64,20 +64,39 @@ export function patchBrowserType(project: Project) {
 			if (options.channel && options.channel !== 'chromium')
 				return undefined;
 			// Patchwright: never fall back to the bundled Chrome-for-Testing registry.
-			// Resolve an official system browser (Brave -> Chrome -> Chromium)
-			// across Windows / Linux / macOS; the scanned paths match whatever
-			// architecture (x64 / x86 / arm64) is installed on this machine.
+			// Resolve an official system browser in native-identity-safe order
+			// (Google Chrome -> Chromium -> Brave) across Windows / Linux / macOS;
+			// the scanned paths match whatever architecture (x64 / x86 / arm64)
+			// is installed on this machine. Brave is deliberately last: its native
+			// farbling and navigator.brave artifact cannot be made to look like
+			// Google Chrome without a contradiction.
 			for (const candidate of patchwrightSystemBrowserCandidates()) {
 				if (await existsAsync(candidate))
 					return candidate;
 			}
-			throw new Error('Patchwright: no official system browser found (Brave, Google Chrome or Chromium). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');
+			throw new Error('Patchwright: no official system browser found (Google Chrome, Chromium or Brave). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');
 		}
 		return undefined;
 	`);
 
 	// -- prepareUserDataDir call site: seed Brave shields prefs into fresh temp profiles --
 	const prepareToLaunchMethod = browserTypeClass.getMethodOrThrow("_prepareToLaunch");
+	const resolveCallStatement = assertDefined(
+		prepareToLaunchMethod
+			.getDescendantsOfKind(SyntaxKind.VariableStatement)
+			.find(statement => statement.getText().includes("await this.resolveExecutablePath(options)")),
+		"resolveExecutablePath call in _prepareToLaunch",
+	);
+	const resolveCallBlock = resolveCallStatement.getParentIfKindOrThrow(SyntaxKind.Block);
+	resolveCallBlock.insertStatements(
+		resolveCallBlock.getStatements().indexOf(resolveCallStatement) + 1,
+		`
+			// Patchwright: keep the resolved path on the launch options so
+			// BrowserOptions and every stealth check see the same executable.
+			if (customExecutablePath)
+				(options as any).customExecutablePath = customExecutablePath;
+		`,
+	);
 	const prepareUserDataDirStatement = assertDefined(
 		prepareToLaunchMethod
 			.getDescendantsOfKind(SyntaxKind.ExpressionStatement)
@@ -131,7 +150,7 @@ export function patchBrowserType(project: Project) {
 		}
 
 		// Patchwright: official system browser candidates in priority order
-		// (Brave -> Chrome -> Chromium) for Windows, Linux and macOS. Microsoft Edge is
+		// (Chrome -> Chromium -> Brave) for Windows, Linux and macOS. Microsoft Edge is
 			// intentionally excluded from auto-discovery: Cloudflare's managed-challenge
 			// scoring rejects Edge sessions (headless or not), making WAF tests unpassable.
 			// Users can still request Edge explicitly via channel: 'msedge' or executablePath.
@@ -144,29 +163,50 @@ export function patchBrowserType(project: Project) {
 				const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\\\Program Files (x86)';
 				const lad = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
 				candidates.push(
-					path.join(pf, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
-					path.join(pf86, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
-					path.join(lad, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
 					path.join(pf, 'Google', 'Chrome', 'Application', 'chrome.exe'),
 					path.join(pf86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
 					path.join(lad, 'Google', 'Chrome', 'Application', 'chrome.exe'),
 					path.join(pf, 'Chromium', 'Application', 'chrome.exe'),
 					path.join(lad, 'Chromium', 'Application', 'chrome.exe'),
+					path.join(pf, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+					path.join(pf86, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+					path.join(lad, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
 				);
 			} else if (process.platform === 'darwin') {
 				candidates.push(
-					'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
 					'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
 					'/Applications/Chromium.app/Contents/MacOS/Chromium',
+					'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
 				);
 			} else {
 				candidates.push(
-					'/usr/bin/brave-browser', '/usr/bin/brave', '/opt/brave.com/brave/brave',
 					'/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/chrome',
 					'/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/chrome', '/snap/bin/chromium',
+					'/usr/bin/brave-browser', '/usr/bin/brave', '/opt/brave.com/brave/brave',
 				);
 			}
 			return candidates;
 		}
+
+		// Patchwright: verify a downloaded macOS app bundle before copying it.
+		// Never copy an unsigned or Gatekeeper-rejected browser into /Applications.
+		async function patchwrightVerifyMacApp(appPath: string): Promise<boolean> {
+			const codesign = await patchwrightRunCommand('codesign', ['--verify', '--deep', '--strict', appPath], 30000);
+			if (!codesign.ok)
+				return false;
+			const gatekeeper = await patchwrightRunCommand('spctl', ['--assess', '--type', 'execute', '--verbose', appPath], 30000);
+			return gatekeeper.ok;
+		}
 	`);
+
+	// Propagate the auto-resolved executable into BrowserOptions. This textual
+	// edit runs last because replaceWithText invalidates earlier class nodes.
+	let finalText = browserTypeSourceFile.getFullText();
+	finalText = replaceRequired(
+		finalText,
+		"customExecutablePath: options.executablePath,",
+		"customExecutablePath: options.executablePath || (options as any).customExecutablePath,",
+		"browserType.ts customExecutablePath propagation",
+	);
+	browserTypeSourceFile.replaceWithText(finalText);
 }

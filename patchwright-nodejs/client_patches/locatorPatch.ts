@@ -16,7 +16,7 @@ export function patchLocator(project: Project) {
 	evaluateMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateCall = assertDefined(
 		evaluateMethod
@@ -30,7 +30,7 @@ export function patchLocator(project: Project) {
 	evaluateHandleMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateHandleCall = assertDefined(
 		evaluateHandleMethod
@@ -44,7 +44,7 @@ export function patchLocator(project: Project) {
 	evaluateAllMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateAllCall = assertDefined(
 		evaluateAllMethod

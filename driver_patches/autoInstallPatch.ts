@@ -70,15 +70,15 @@ export function patchAutoInstall(project: Project) {
 	applyReplacements(
 		browserTypeSourceFile,
 		[[
-			"\t\t\tthrow new Error('Patchwright: no official system browser found (Brave, Google Chrome or Chromium). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
+			"\t\t\tthrow new Error('Patchwright: no official system browser found (Google Chrome, Chromium or Brave). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
 			"\t\t\t// Patchwright: the scan found nothing - install one automatically\n" +
-				"\t\t\t// (Brave -> Chrome -> Chromium) so a clean machine works out of the box.\n" +
+				"\t\t\t// (Chrome -> Chromium -> Brave) so a clean machine works out of the box.\n" +
 				"\t\t\t// Opt out with PATCHWRIGHT_AUTO_INSTALL=0.\n" +
 				"\t\t\tif (process.env.PATCHWRIGHT_AUTO_INSTALL !== '0') {\n" +
 					"\t\t\t\tconst installedCandidate = await patchwrightAutoInstallSystemBrowser();\n" +
 					"\t\t\t\tif (installedCandidate) return installedCandidate;\n" +
 					"\t\t\t}\n" +
-					"\t\t\tthrow new Error('Patchwright: no official system browser found (Brave, Google Chrome or Chromium). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
+					"\t\t\tthrow new Error('Patchwright: no official system browser found (Google Chrome, Chromium or Brave). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
 		]],
 		"server/browserType.ts (auto-install before the no-browser throw)",
 	);
@@ -88,7 +88,7 @@ export function patchAutoInstall(project: Project) {
 // ---------------------------------------------------------------------------
 // Patchwright: automatic system-browser installation. Runs only when no
 // official system browser exists on the machine and PATCHWRIGHT_AUTO_INSTALL
-// is not '0'. Installs Brave (preferred) or Google Chrome from official
+// is not '0'. Installs Google Chrome (preferred) or Brave from official
 // sources only - no third-party mirrors, no Chrome-for-Testing builds.
 // Hardened: single-flight (concurrent launches share one attempt), attempt
 // once per process, and signature-verified installers.
@@ -136,14 +136,14 @@ async function patchwrightSystemBrowserInstalled(): Promise<boolean> {
 async function patchwrightAutoInstallSystemBrowser(): Promise<string | undefined> {
   if (patchwrightInstallAttempt) return await patchwrightInstallAttempt;
   patchwrightInstallAttempt = (async () => {
-    console.log('Patchwright: no system browser found - attempting automatic installation (Brave / Google Chrome)...');
+    console.log('Patchwright: no system browser found - attempting automatic installation (Google Chrome / Brave)...');
     try {
       if (process.platform === 'win32') {
         // Prefer the Windows Package Manager (handles silent + user scope cleanly,
         // and verifies packages against signed winget manifests).
         const winget = await patchwrightRunCommand('winget', ['--version'], 15000);
         if (winget.ok) {
-          for (const id of ['Brave.Brave', 'Google.Chrome']) {
+          for (const id of ['Google.Chrome', 'Brave.Brave']) {
             for (const extra of [['--scope', 'user'], []]) {
               const result = await patchwrightRunCommand('winget', ['install', '--id', id, '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements', ...extra]);
               if (result.ok) break;
@@ -152,15 +152,8 @@ async function patchwrightAutoInstallSystemBrowser(): Promise<string | undefined
           }
         } else {
           // No winget: official per-user installers directly from the vendors,
-          // executed only after their Authenticode signature validates.
-          if (!await patchwrightSystemBrowserInstalled()) {
-            const braveInstaller = path.join(os.tmpdir(), 'patchwright-brave-installer.exe');
-            await patchwrightDownloadFile('https://laptop-updates.brave.com/latest/winx64', braveInstaller);
-            if (await patchwrightVerifyWindowsSignature(braveInstaller))
-              await patchwrightRunCommand(braveInstaller, ['--do-not-launch-chrome']);
-            else
-              console.log('Patchwright: Brave installer signature check failed - skipping it.');
-          }
+          // executed only after their Authenticode signature validates. Chrome
+          // first so the default launch identity stays Google Chrome.
           if (!await patchwrightSystemBrowserInstalled()) {
             const chromeInstaller = path.join(os.tmpdir(), 'patchwright-chrome-installer.msi');
             await patchwrightDownloadFile('https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi', chromeInstaller);
@@ -169,12 +162,20 @@ async function patchwrightAutoInstallSystemBrowser(): Promise<string | undefined
             else
               console.log('Patchwright: Chrome installer signature check failed - skipping it.');
           }
+          if (!await patchwrightSystemBrowserInstalled()) {
+            const braveInstaller = path.join(os.tmpdir(), 'patchwright-brave-installer.exe');
+            await patchwrightDownloadFile('https://laptop-updates.brave.com/latest/winx64', braveInstaller);
+            if (await patchwrightVerifyWindowsSignature(braveInstaller))
+              await patchwrightRunCommand(braveInstaller, ['--do-not-launch-chrome']);
+            else
+              console.log('Patchwright: Brave installer signature check failed - skipping it.');
+          }
         }
       } else if (process.platform === 'darwin') {
         // Homebrew first (formulae/casks are checksum-verified by brew itself).
         const brew = await patchwrightRunCommand('brew', ['--version'], 15000);
         if (brew.ok) {
-          for (const cask of ['brave-browser', 'google-chrome']) {
+          for (const cask of ['google-chrome', 'brave-browser']) {
             const result = await patchwrightRunCommand('brew', ['install', '--cask', cask]);
             if (result.ok || await patchwrightSystemBrowserInstalled()) break;
           }

@@ -1,5 +1,5 @@
 import { type Project, SyntaxKind } from "ts-morph";
-import { assertDefined } from "./utils.ts";
+import { assertDefined, replaceRequired } from "./utils.ts";
 
 // ----------------------------------
 // server/chromium/crServiceWorker.ts
@@ -34,7 +34,7 @@ export function patchCRServiceWorker(project: Project) {
 		.find(s => s.getText().includes("session.send") && s.getText().includes("Runtime.enable"))
 		?.remove();
 
-	if (crServiceWorkerConstructorBody.getText().includes('expression: "globalThis"')) return;
+	if (!crServiceWorkerConstructorBody.getText().includes('expression: "globalThis"')) {
 	crServiceWorkerConstructorBody.addStatements(`
 		session._sendMayFail("Runtime.evaluate", {
 			expression: "globalThis",
@@ -49,4 +49,36 @@ export function patchCRServiceWorker(project: Project) {
 			}
 		});
 	`);
+	}
+
+	let text = crServiceWorkerSourceFile.getFullText();
+	text = replaceRequired(
+		text,
+		"    session.send('Runtime.runIfWaitingForDebugger').catch(e => {});",
+		`    const patchwrightResume = async () => {
+      const native = (this.browserContext._browser as any).__patchwrightMetadata;
+      if (native?.ua && native?.hev) {
+        const fullVersionList = Array.isArray(native.hev.fullVersionList) ? native.hev.fullVersionList : [];
+        await session.send('Emulation.setUserAgentOverride', {
+          userAgent: String(native.ua).replace(/HeadlessChrome/g, 'Chrome'),
+          userAgentMetadata: {
+            brands: native.hev.brands,
+            fullVersionList,
+            fullVersion: (fullVersionList.find((entry: any) => entry.brand !== 'Chromium' && entry.brand !== 'Not.A/Brand') || fullVersionList[0] || {}).version || '',
+            platform: native.hev.platform || '',
+            platformVersion: native.hev.platformVersion || '',
+            architecture: native.hev.architecture || '',
+            model: native.hev.model || '',
+            bitness: native.hev.bitness || '',
+            mobile: !!native.hev.mobile,
+            wow64: !!native.hev.wow64,
+          },
+        }).catch(() => { });
+      }
+      await session.send('Runtime.runIfWaitingForDebugger').catch(() => { });
+    };
+    void patchwrightResume();`,
+		"CRServiceWorker native CH resume",
+	);
+	crServiceWorkerSourceFile.replaceWithText(text);
 }

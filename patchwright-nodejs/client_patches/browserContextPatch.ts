@@ -32,18 +32,7 @@ export function patchBrowserContext(project: Project) {
 	});
 	const installInjectRouteMethod = browserContextClass.getMethodOrThrow("installInjectRoute");
 	installInjectRouteMethod.setBodyText(`
-		if (this.routeInjecting) return;
-			await this.route('**/*', async route => {
-			try {
-					if (route.request().resourceType() === 'document' && route.request().url().startsWith('http')) {
-							await route.fallback({ patchwrightInitScript: true } as any);
-					} else {
-							await route.fallback();
-					}
-			} catch (error) {
-					await route.fallback();
-			}
-		});
+		// No catch-all route: addInitScript covers every document.
 		this.routeInjecting = true;
 	`);
 

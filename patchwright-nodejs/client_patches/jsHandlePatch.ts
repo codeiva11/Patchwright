@@ -16,7 +16,7 @@ export function patchJsHandle(project: Project) {
 	evaluateMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateExpressionCall = assertDefined(
 		evaluateMethod
@@ -30,7 +30,7 @@ export function patchJsHandle(project: Project) {
 	evaluateHandleMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateHandleExpressionCall = assertDefined(
 		evaluateHandleMethod

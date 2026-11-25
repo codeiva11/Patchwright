@@ -26,7 +26,7 @@
     </a>
 </p>
 
-#### Patchwright is a patched and undetected version of the Playwright Testing and Automation Framework. </br> It can be used as a drop-in replacement for Playwright.
+#### Patchwright is a patched build of the Playwright Testing and Automation Framework. </br> It can be used as a drop-in replacement for Playwright. It reduces common driver-level automation signals; it cannot guarantee that every anti-bot system will accept it.
 
 > [!NOTE]  
 > This repository serves the Patchwright-NodeJS Package. To use Patchwright with Python, check out the [Python Package](https://github.com/Kaliiiiiiiiii-Vinyzu/patchwright-python).
@@ -171,7 +171,7 @@ const { chromium } = require('patchwright');
 
 ### Best Practice  - use Chrome without Fingerprint Injection
 
-To be completely undetected, use the following configuration:
+To reduce the most common automation signals, use the following configuration:
 ```js
 chromium.launchPersistentContext("...", {
     channel: "chrome",
@@ -191,10 +191,10 @@ chromium.launchPersistentContext("...", {
 ## Patches
 
 ### [Runtime.enable](https://vanilla.aslushnikov.com/?Runtime.enable) Leak
-This is the biggest Patch Patchwright uses. To avoid detection by this leak, patchwright avoids using [Runtime.enable](https://vanilla.aslushnikov.com/?Runtime.enable) by executing Javascript in (isolated) ExecutionContexts.
+Patchwright does not enable [Runtime.enable](https://vanilla.aslushnikov.com/?Runtime.enable) during startup. It enables the domain lazily only when the page asks for console or page-error events, because Chrome cannot deliver those without it.
 
 ### [Console.enable](https://vanilla.aslushnikov.com/?Console.enable) Leak
-Patchwright patches this leak by disabling the Console API all together. This means, console functionality will not work in Patchwright. If you really need the console, you might be better off using Javascript loggers, although they also can be easily detected.
+Patchwright does not enable the CDP `Log`/`Console` domains at startup. Console messages are collected on demand when a listener is attached.
 
 ### Command Flags Leaks
 Patchwright tweaks the Playwright Default Args to avoid detection by Command Flag Leaks. This (most importantly) affects:
@@ -217,22 +217,18 @@ Patchwright is now also able to use XPaths in Closed Shadow Roots.
 
 ## Stealth
 
-With the right setup, Patchwright currently is considered undetectable.
-Patchwright passes:
-- [Brotector](https://kaliiiiiiiiii.github.io/brotector/) ✅ (with [CDP-Patches](https://github.com/Kaliiiiiiiiii-Vinyzu/CDP-Patches/))
-- [Cloudflare](https://cloudflare.com/) ✅
-- [Kasada](https://www.kasada.io/) ✅
-- [Akamai](https://www.akamai.com/products/bot-manager/) ✅
-- [Shape/F5](https://www.f5.com/) ✅
-- [Bet365](https://bet365.com/) ✅
-- [Datadome](https://datadome.co/products/bot-protection/) ✅
-- [Fingerprint.com](https://fingerprint.com/products/bot-detection/) ✅
-- [CreepJS](https://abrahamjuliot.github.io/creepjs/) ✅
-- [Sannysoft](https://bot.sannysoft.com/) ✅
-- [Incolumitas](https://bot.incolumitas.com/) ✅
-- [IPHey](https://iphey.com/) ✅
-- [Browserscan](https://browserscan.net/) ✅
-- [Pixelscan](https://pixelscan.net/) ✅
+Patchwright is not claimed to be universally undetectable. Detectors combine browser signals,
+network reputation, IP/ASN, account history, request timing and server-side models; no client
+library can guarantee a pass against all of them.
+
+The repository's own checks are the source of truth:
+- `utils/detection_smoke_test.mjs`
+- `utils/custom_tests/runtime_smoke_test.mjs`
+- `utils/custom_tests/service_worker_smoke_test.mjs`
+- `utils/custom_tests/tls_ja4_check.mjs`
+
+Third-party detector pages can change without notice, so historical pass screenshots are not a
+continuing guarantee.
 
 ---
 

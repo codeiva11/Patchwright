@@ -33,7 +33,7 @@ export function patchFrame(project: Project) {
 	evaluateMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateAssertCall = assertDefined(
 		evaluateMethod.getFirstDescendant(node =>
@@ -56,7 +56,7 @@ export function patchFrame(project: Project) {
 	evaluateHandleMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateHandleAssertCall = assertDefined(
 		evaluateHandleMethod.getFirstDescendant(node =>
@@ -79,7 +79,7 @@ export function patchFrame(project: Project) {
 	evalOnSelectorMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evalOnSelectorAssertCall = assertDefined(
 		evalOnSelectorMethod.getFirstDescendant(node =>

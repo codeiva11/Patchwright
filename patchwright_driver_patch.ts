@@ -112,6 +112,7 @@ patches.patchChromium(project);
 // (WebRTC leak protection flags)
 // ----------------------------------
 patches.patchChromiumLaunch(project);
+patches.patchLaunchUserAgent(project);
 
 // ----------------------------------
 // server/registry/index.ts
@@ -225,12 +226,18 @@ patches.patchClock(project);
 // (fingerprint spoofing + permissions)
 // ------------------------------------
 patches.patchFingerprint(project);
+patches.patchFingerprintHardening(project);
 // ----------------------------------
 // server/chromium/crPage.ts
 // (system-browser stealth: UA brands +
 // HeadlessChrome token fix)
 // ----------------------------------
 patches.patchSystemStealth(project);
+// ------------------------------------------
+// lazy Runtime.enable for console/pageerror
+// ------------------------------------------
+patches.patchLazyConsole(project);
+patches.patchViewportSurface(project);
 
 // ----------------------
 // Patchwright CLI Aliases

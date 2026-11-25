@@ -9,6 +9,28 @@ export function patchPage(project: Project) {
 	const pageSourceFile = project.addSourceFileAtPath("packages/playwright-core/src/client/page.ts");
 
 	// ------- Page Class -------
+	// Lazy Runtime.enable: console/pageerror listeners ask the existing
+	// consoleMessages/pageErrors protocol methods to subscribe, which enables
+	// Runtime only when the page actually needs it.
+	{
+		const sourceText = pageSourceFile.getFullText();
+		const marker = "  static from(page: channels.PageChannel): Page {";
+		const replacement = [
+			"  override on(event: string | symbol, listener: (...args: any[]) => void): this {",
+			"    if (event === Events.Page.Console) void this.consoleMessages({ filter: 'all' }).catch(() => { });",
+			"    if (event === Events.Page.PageError) void this.pageErrors({ filter: 'all' }).catch(() => { });",
+			"    return super.on(event, listener);",
+			"  }",
+			"",
+			"  override addListener(event: string | symbol, listener: (...args: any[]) => void): this {",
+			"    if (event === Events.Page.Console) void this.consoleMessages({ filter: 'all' }).catch(() => { });",
+			"    if (event === Events.Page.PageError) void this.pageErrors({ filter: 'all' }).catch(() => { });",
+			"    return super.addListener(event, listener);",
+			"  }",
+			"",
+		].join("\n");
+		pageSourceFile.replaceWithText(sourceText.replace(marker, replacement + marker));
+	}
 	const pageClass = pageSourceFile.getClassOrThrow("Page");
 	pageClass.addProperty({ name: "routeInjecting", type: "boolean", initializer: "false" });
 	
@@ -31,18 +53,7 @@ export function patchPage(project: Project) {
 	});
 	const installInjectRouteMethod = pageClass.getMethodOrThrow("installInjectRoute");
 	installInjectRouteMethod.setBodyText(`
-		if (this.routeInjecting || this.context().routeInjecting) return;
-		await this.route('**/*', async route => {
-			try {
-				if (route.request().resourceType() === 'document' && route.request().url().startsWith('http')) {
-						await route.fallback({ patchwrightInitScript: true } as any);
-				} else {
-						await route.fallback();
-				}
-		} catch (error) {
-				await route.fallback();
-			}
-		});
+		// No catch-all route: Page.addInitScript already runs in every new document.
 		this.routeInjecting = true;
 	`);
 	
@@ -51,7 +62,7 @@ export function patchPage(project: Project) {
 	evaluateMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateAssertCall = assertDefined(
 		evaluateMethod.getFirstDescendant(node =>
@@ -73,7 +84,7 @@ export function patchPage(project: Project) {
 	evaluateHandleMethod.addParameter({
 		name: "isolatedContext",
 		type: "boolean",
-		initializer: "true",
+		initializer: "false",
 	});
 	const evaluateHandleAssertCall = assertDefined(
 		evaluateHandleMethod.getFirstDescendant(node =>
