@@ -124,20 +124,20 @@ jobs:
         continue-on-error: ${{ github.event_name == 'workflow_call' }}
         run: |
           cd playwright
-          PWTEST_MODE=driver xvfb-run -a npx playwright test --config=tests/library/playwright.config.ts --project=chromium-page --max-failures=0 --reporter=github --retries=3
+          PWTEST_MODE=driver xvfb-run -a npx playwright test --config=tests/library/playwright.config.ts --project=chromium-page --max-failures=0 --reporter=line --retries=3
 
       - name: Run Library Tests
         id: test_library
         continue-on-error: ${{ github.event_name == 'workflow_call' }}
         run: |
           cd playwright
-          PWTEST_MODE=driver xvfb-run -a npx playwright test --config=tests/library/playwright.config.ts --project=chromium-library --max-failures=0 --reporter=github --retries=3
+          PWTEST_MODE=driver xvfb-run -a npx playwright test --config=tests/library/playwright.config.ts --project=chromium-library --max-failures=0 --reporter=line --retries=3
 
       - name: Set Test Outcome
         id: set_test_outcome
         if: always()
         run: |
-          if [ "${{ steps.test_detection.outcome }}" = "failure" ] || [ "${{ steps.test_runtime.outcome }}" = "failure" ] || [ "${{ steps.test_service_worker.outcome }}" = "failure" ] || [ "${{ steps.test_tls.outcome }}" = "failure" ] || [ "${{ steps.test_page.outcome }}" = "failure" ] || [ "${{ steps.test_library.outcome }}" = "failure" ]; then
+          if [ "${{ steps.test_detection.outcome }}" != "success" ] || [ "${{ steps.test_runtime.outcome }}" != "success" ] || [ "${{ steps.test_service_worker.outcome }}" != "success" ] || [ "${{ steps.test_tls.outcome }}" != "success" ] || [ "${{ steps.test_page.outcome }}" != "success" ] || [ "${{ steps.test_library.outcome }}" != "success" ]; then
             echo "test_outcome=failure" >> "$GITHUB_OUTPUT"
             if [ "${{ github.event_name }}" = "workflow_call" ]; then
               echo "Tests failed under workflow_call, exiting with failure code."

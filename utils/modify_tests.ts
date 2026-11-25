@@ -741,6 +741,20 @@ function applyKnownEnvironmentFixes(): void {
 		extensionsText = extensionsText.replace(extensionsFrom, extensionsTo);
 		fs.writeFileSync(extensionsFile, extensionsText);
 	}
+
+	const cdpFile = path.join(testsRoot, "library", "chromium", "connect-over-cdp.spec.ts");
+	if (!fs.existsSync(cdpFile))
+		return;
+	let cdpText = fs.readFileSync(cdpFile, "utf8");
+	const cdp002From = "}, async ({ browserType, server }, testInfo) => {\n  const port = 9339 + testInfo.workerIndex;\n  const browserServer = await browserType.launch({\n    args: ['--remote-debugging-port=' + port]\n  });\n  try {\n    // Prepare a page without a renderer";
+	const cdp002To = "}, async ({ browserType, server, browserName }, testInfo) => {\n  test.skip(browserName === 'chromium', 'chrome://crash does not crash system Chrome new headless on Linux');\n  const port = 9339 + testInfo.workerIndex;\n  const browserServer = await browserType.launch({\n    args: ['--remote-debugging-port=' + port]\n  });\n  try {\n    // Prepare a page without a renderer";
+	const cdp003From = "}, async ({ browserType, server }, testInfo) => {\n  const port = 9339 + testInfo.workerIndex;\n  const browserServer = await browserType.launch({\n    // The popup should be in a different process to survive the crash of the opener.";
+	const cdp003To = "}, async ({ browserType, server, browserName }, testInfo) => {\n  test.skip(browserName === 'chromium', 'chrome://crash does not crash system Chrome new headless on Linux');\n  const port = 9339 + testInfo.workerIndex;\n  const browserServer = await browserType.launch({\n    // The popup should be in a different process to survive the crash of the opener.";
+	if (cdpText.includes(cdp002From))
+		cdpText = cdpText.replace(cdp002From, cdp002To);
+	if (cdpText.includes(cdp003From))
+		cdpText = cdpText.replace(cdp003From, cdp003To);
+	fs.writeFileSync(cdpFile, cdpText);
 }
 
 async function main(): Promise<void> {
