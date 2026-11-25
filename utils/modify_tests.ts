@@ -756,16 +756,6 @@ function applyKnownEnvironmentFixes(): void {
 		cdpText = cdpText.replace(cdp003From, cdp003To);
 	fs.writeFileSync(cdpFile, cdpText);
 
-	const webMcpFile = path.join(testsRoot, "library", "webmcp.spec.ts");
-	if (!fs.existsSync(webMcpFile))
-		return;
-	let webMcpText = fs.readFileSync(webMcpFile, "utf8");
-	const webMcpFrom = "test('WM-014 should list and call tools in cross-origin and nested frames', async";
-	const webMcpTo = "test.skip('WM-014 should list and call tools in cross-origin and nested frames', async";
-	if (webMcpText.includes(webMcpFrom)) {
-		webMcpText = webMcpText.replace(webMcpFrom, webMcpTo);
-		fs.writeFileSync(webMcpFile, webMcpText);
-	}
 }
 
 async function main(): Promise<void> {
