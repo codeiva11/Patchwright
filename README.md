@@ -416,7 +416,7 @@ re-running the pipeline on the new source — no manual code edits inside the Pl
 ```bash
 cd playwright
 git fetch && git checkout <new-version-tag>
-git checkout HEAD -- packages/ && git clean -fdx -e node_modules   # always start from a clean tree
+git checkout HEAD -- packages/ utils/ && git clean -fdx -e node_modules   # always start from a clean tree (utils/build.js is patched too)
 cd ..
 npx tsx patchwright_driver_patch.ts                # applies ALL AST patches (driver + client)
 npm --prefix playwright run build && npm --prefix playwright run build   # run twice (channel-gen race)
@@ -435,7 +435,7 @@ Behavior on upstream changes:
   that one patch file while all other features keep applying untouched. This is by design —
   a patch that silently no-ops would be an undetectable security regression.
 * **Reproducible builds.** Each run starts from vanilla Playwright (`git checkout HEAD --
-  packages/ && git clean`), so the output is deterministic for a given (patch set, version) pair.
+  packages/ utils/ && git clean`), so the output is deterministic for a given (patch set, version) pair.
 * **Post-upgrade verification:** `npm run typecheck` (root),
   `node utils/custom_tests/runtime_smoke_test.mjs`, `node utils/custom_tests/tls_ja4_check.mjs`,
   and the live-detector suite.
