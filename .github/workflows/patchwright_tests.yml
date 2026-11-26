@@ -27,7 +27,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       test_outcome: ${{ steps.set_test_outcome.outputs.test_outcome }}
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
@@ -147,4 +146,125 @@ jobs:
             fi
           else
             echo "test_outcome=success" >> "$GITHUB_OUTPUT"
+          fi
+
+  # macOS validation: same smoke checks and test suites on macOS so the
+  # darwin resolution paths (patchwrightSystemBrowserCandidates, codesign/
+  # Gatekeeper verification, darwin UA platform string) are CI-verified too.
+  # Deliberately not wired into the workflow_call test_outcome output: the
+  # release pipeline keeps gating on the Linux suite while the macOS matrix
+  # proves itself, but every push/PR/dispatch run gates on both jobs.
+  run-patchwright-tests-macos:
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node v24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install NPM Dependencies
+        run: npm ci
+
+      - name: Install Playwright Driver
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch_version="${{ inputs.playwright_version || github.event.inputs.playwright_version }}"
+          if [ -z "$branch_version" ]; then
+            response=$(curl --silent -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/microsoft/playwright/releases/latest" || true)
+            branch_version=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+          fi
+          if [ -z "$branch_version" ] || [ "$branch_version" = "v0.0.0" ]; then
+            branch_version="v1.51.0"
+          else
+            branch_version="v${branch_version#v}"
+          fi
+          echo "Resolved Playwright version: $branch_version"
+          git clone --depth 1 https://github.com/microsoft/playwright --branch "$branch_version"
+          cd playwright
+          npm ci
+
+      - name: Patch Playwright Driver
+        run: npm run patch
+
+      - name: Generate Channels
+        run: |
+          cd playwright
+          node utils/generate_channels.js || true
+
+      - name: Build Patchwright Driver
+        run: |
+          cd playwright
+          # The first build bootstraps generated channel files; rerun once if that
+          # bootstrap step races the rest of the build.
+          npm run build || npm run build
+
+      # Patchwright auto-resolves the machine's own browser; make sure a genuine
+      # branded Google Chrome exists on the runner.
+      - name: Install System Google Chrome
+        run: |
+          if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+            brew install --cask google-chrome
+          fi
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version
+
+      - name: Install FFmpeg for Video Tests
+        run: |
+          cd playwright
+          npx playwright install ffmpeg
+
+      - name: Run Detection Smoke Test
+        id: test_detection
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: node utils/detection_smoke_test.mjs
+
+      - name: Run Runtime Smoke Test (new core patches)
+        id: test_runtime
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: node utils/custom_tests/runtime_smoke_test.mjs
+
+      - name: Run Service Worker Identity Smoke Test
+        id: test_service_worker
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: node utils/custom_tests/service_worker_smoke_test.mjs
+
+      - name: Run TLS/JA4 Alignment Check
+        id: test_tls
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: node utils/custom_tests/tls_ja4_check.mjs
+
+      - name: Modify Tests for Patchwright
+        run: npx tsx utils/modify_tests.ts
+
+      - name: Run Page Tests
+        id: test_page
+        timeout-minutes: 45
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: |
+          cd playwright
+          PWTEST_MODE=driver npx playwright test --config=tests/library/playwright.config.ts --project=chromium-page --max-failures=0 --reporter=line --retries=3
+
+      - name: Run Library Tests
+        id: test_library
+        timeout-minutes: 60
+        continue-on-error: ${{ github.event_name == 'workflow_call' }}
+        run: |
+          cd playwright
+          PWTEST_MODE=driver npx playwright test --config=tests/library/playwright.config.ts --project=chromium-library --max-failures=0 --reporter=line --retries=3
+
+      - name: Set macOS Test Outcome
+        id: set_macos_test_outcome
+        if: always()
+        run: |
+          if [ "${{ steps.test_detection.outcome }}" != "success" ] || [ "${{ steps.test_runtime.outcome }}" != "success" ] || [ "${{ steps.test_service_worker.outcome }}" != "success" ] || [ "${{ steps.test_tls.outcome }}" != "success" ] || [ "${{ steps.test_page.outcome }}" != "success" ] || [ "${{ steps.test_library.outcome }}" != "success" ]; then
+            echo "macos_test_outcome=failure" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "macos_test_outcome=success" >> "$GITHUB_OUTPUT"
           fi

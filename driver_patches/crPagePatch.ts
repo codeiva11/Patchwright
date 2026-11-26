@@ -144,7 +144,9 @@ export function patchCRPage(project: Project) {
 		.getBodyOrThrow()
 		.asKindOrThrow(SyntaxKind.Block);
 	const finalPromisesAwait = assertDefined(
-		initializeFrameSessionMethodBody.getStatements().find(statement => statement.getText() === "await Promise.all(promises);"),
+		initializeFrameSessionMethodBody
+			.getStatements()
+			.find(statement => statement.getText() === "await Promise.all(promises);"),
 	);
 	initializeFrameSessionMethodBody.insertStatements(
 		finalPromisesAwait.getChildIndex() + 1,
@@ -437,7 +439,10 @@ export function patchCRPage(project: Project) {
 				statement.getText().includes("worldName = 'utility'"),
 		)
 		.forEach((statement, index) => {
-			if (index === 0) statement.replaceWithText("let worldName = contextPayload.name || (contextPayload.auxData?.isDefault ? 'main' : '');");
+			if (index === 0)
+				statement.replaceWithText(
+					"let worldName = contextPayload.name || (contextPayload.auxData?.isDefault ? 'main' : '');",
+				);
 			else statement.remove();
 		});
 	// Guard _contextCreated to only register known worlds ('main' or 'utility')

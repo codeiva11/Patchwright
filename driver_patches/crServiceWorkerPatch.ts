@@ -35,7 +35,7 @@ export function patchCRServiceWorker(project: Project) {
 		?.remove();
 
 	if (!crServiceWorkerConstructorBody.getText().includes('expression: "globalThis"')) {
-	crServiceWorkerConstructorBody.addStatements(`
+		crServiceWorkerConstructorBody.addStatements(`
 		session._sendMayFail("Runtime.evaluate", {
 			expression: "globalThis",
 			serializationOptions: { serialization: "idOnly" }

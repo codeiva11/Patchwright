@@ -11,16 +11,21 @@ import { formatFiles } from "./utils/format-indentation.ts";
 // so reset the patched trees before applying. Set PATCHWRIGHT_KEEP_WORKTREE=1 to skip
 // (e.g. when iterating on a single patch against a partially patched tree).
 import { execFileSync } from "node:child_process";
-if (process.env.PATCHWRIGHT_KEEP_WORKTREE !== '1') {
+if (process.env.PATCHWRIGHT_KEEP_WORKTREE !== "1") {
 	try {
 		// The script is always run from the playwright/ checkout, so resolve its
 		// git toplevel instead of assuming a repository-relative path.
-		const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
-		execFileSync('git', ['-C', toplevel, 'checkout', 'HEAD', '--', 'packages/', 'utils/'], { stdio: 'pipe' });
-		execFileSync('git', ['-C', toplevel, 'clean', '-fdx', '-e', 'node_modules'], { stdio: 'pipe' });
-		console.log('[patchwright_driver_patch] reset playwright/ to vanilla (packages/ + utils/).');
+		const toplevel = execFileSync("git", ["rev-parse", "--show-toplevel"], { stdio: ["ignore", "pipe", "pipe"] })
+			.toString()
+			.trim();
+		execFileSync("git", ["-C", toplevel, "checkout", "HEAD", "--", "packages/", "utils/"], { stdio: "pipe" });
+		execFileSync("git", ["-C", toplevel, "clean", "-fdx", "-e", "node_modules"], { stdio: "pipe" });
+		console.log("[patchwright_driver_patch] reset playwright/ to vanilla (packages/ + utils/).");
 	} catch (error) {
-		console.log('[patchwright_driver_patch] worktree reset skipped (not a git checkout?):', String(error).split('\n')[0]);
+		console.log(
+			"[patchwright_driver_patch] worktree reset skipped (not a git checkout?):",
+			String(error).split("\n")[0],
+		);
 	}
 }
 

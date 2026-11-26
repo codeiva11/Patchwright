@@ -12,11 +12,12 @@ const launchHelper = [
 	"      return;",
 	"    const major = match[1];",
 	"    const identity = (output + ' ' + (channel || '') + ' ' + executable).toLowerCase();",
-	"    const isEdge = identity.includes('edge') || identity.includes('msedge');",
+	"    // Patchwright drops Microsoft Edge support: never override Edge's native",
+	"    // identity. An Edge executable keeps its genuine UA and TLS stack.",
+	"    if (identity.includes('edge') || identity.includes('msedge'))",
+	"      return;",
 	"    const platform = process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'X11; Linux x86_64';",
-	"    let userAgent = 'Mozilla/5.0 (' + platform + ') AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + major + '.0.0.0 Safari/537.36';",
-	"    if (isEdge)",
-	"      userAgent += ' Edg/' + major + '.0.0.0';",
+	"    const userAgent = 'Mozilla/5.0 (' + platform + ') AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + major + '.0.0.0 Safari/537.36';",
 	"    return userAgent;",
 	"  } catch {",
 	"    return;",
@@ -31,8 +32,18 @@ const launchHelper = [
 export function patchLaunchUserAgent(project: Project) {
 	const sourceFile = project.addSourceFileAtPath("packages/playwright-core/src/server/chromium/chromium.ts");
 	let text = sourceFile.getFullText();
-	text = replaceRequired(text, "import fs from 'fs';", "import fs from 'fs';\nimport { execFileSync } from 'child_process';", "chromium.ts child_process import");
-	text = replaceRequired(text, "const ARTIFACTS_FOLDER", launchHelper + "\n\nconst ARTIFACTS_FOLDER", "chromium.ts launch UA helper");
+	text = replaceRequired(
+		text,
+		"import fs from 'fs';",
+		"import fs from 'fs';\nimport { execFileSync } from 'child_process';",
+		"chromium.ts child_process import",
+	);
+	text = replaceRequired(
+		text,
+		"const ARTIFACTS_FOLDER",
+		launchHelper + "\n\nconst ARTIFACTS_FOLDER",
+		"chromium.ts launch UA helper",
+	);
 	text = replaceRequired(
 		text,
 		"    const chromeArguments = [...chromiumSwitches()];",

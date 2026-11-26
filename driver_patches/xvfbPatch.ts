@@ -17,25 +17,27 @@ export function patchXvfb(project: Project) {
 	// starts, auto-start Xvfb when this is a headful launch without a display.
 	applyReplacements(
 		browserTypeSourceFile,
-		[[
-			"const prepared = await progress.race(this._prepareToLaunch(options, isPersistent, userDataDir));",
-			"const prepared = await progress.race(this._prepareToLaunch(options, isPersistent, userDataDir));\n" +
-				"\t// Patchwright: headed launches on display-less Linux servers automatically\n" +
-				"\t// get a virtual display (Xvfb), so headful automation works out of the box.\n" +
-				"\t// The Xvfb process is torn down together with the driver process. Opt out\n" +
-				"\t// with PATCHWRIGHT_XVFB=0.\n" +
-				"\tif (process.platform !== 'win32' && process.platform !== 'darwin' && !env.DISPLAY && process.env.PATCHWRIGHT_XVFB !== '0' && !prepared.browserArguments.some(argument => argument === '--headless' || argument.startsWith('--headless='))) {\n" +
-				"\t\ttry {\n" +
-				"\t\t\tconst display = await patchwrightStartXvfb();\n" +
-				"\t\t\tif (display) {\n" +
-				"\t\t\t\tenv.DISPLAY = display;\n" +
-				"\t\t\t\tconsole.log(`Patchwright: no DISPLAY - started Xvfb on ${display} for this headful launch.`);\n" +
-				"\t\t\t}\n" +
-				"\t\t} catch (error) {\n" +
-				"\t\t\tconsole.log('Patchwright: Xvfb auto-start failed, continuing without a display:', String(error));\n" +
-				"\t\t}\n" +
-				"\t}",
-		]],
+		[
+			[
+				"const prepared = await progress.race(this._prepareToLaunch(options, isPersistent, userDataDir));",
+				"const prepared = await progress.race(this._prepareToLaunch(options, isPersistent, userDataDir));\n" +
+					"\t// Patchwright: headed launches on display-less Linux servers automatically\n" +
+					"\t// get a virtual display (Xvfb), so headful automation works out of the box.\n" +
+					"\t// The Xvfb process is torn down together with the driver process. Opt out\n" +
+					"\t// with PATCHWRIGHT_XVFB=0.\n" +
+					"\tif (process.platform !== 'win32' && process.platform !== 'darwin' && !env.DISPLAY && process.env.PATCHWRIGHT_XVFB !== '0' && !prepared.browserArguments.some(argument => argument === '--headless' || argument.startsWith('--headless='))) {\n" +
+					"\t\ttry {\n" +
+					"\t\t\tconst display = await patchwrightStartXvfb();\n" +
+					"\t\t\tif (display) {\n" +
+					"\t\t\t\tenv.DISPLAY = display;\n" +
+					"\t\t\t\tconsole.log(`Patchwright: no DISPLAY - started Xvfb on ${display} for this headful launch.`);\n" +
+					"\t\t\t}\n" +
+					"\t\t} catch (error) {\n" +
+					"\t\t\tconsole.log('Patchwright: Xvfb auto-start failed, continuing without a display:', String(error));\n" +
+					"\t\t}\n" +
+					"\t}",
+			],
+		],
 		"server/browserType.ts (Xvfb auto-start launch hook)",
 	);
 

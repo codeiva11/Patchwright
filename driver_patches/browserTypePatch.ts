@@ -95,6 +95,11 @@ export function patchBrowserType(project: Project) {
 			// BrowserOptions and every stealth check see the same executable.
 			if (customExecutablePath)
 				(options as any).customExecutablePath = customExecutablePath;
+			// Patchwright: Microsoft Edge is not supported. Edge sessions are rejected
+			// by anti-bot managed-challenge scoring and are never branded or spoofed.
+			const requestedChannelPw = String((options as any).channel || '');
+			if (requestedChannelPw.startsWith('msedge'))
+				throw new Error(\`Patchwright: channel "\${requestedChannelPw}" is not supported. Microsoft Edge is rejected by anti-bot scoring; use Google Chrome, Brave, Vivaldi, Opera or chromium-system instead.\`);
 		`,
 	);
 	const prepareUserDataDirStatement = assertDefined(
@@ -151,9 +156,10 @@ export function patchBrowserType(project: Project) {
 
 		// Patchwright: official system browser candidates in priority order
 		// (Chrome -> Chromium -> Brave) for Windows, Linux and macOS. Microsoft Edge is
-			// intentionally excluded from auto-discovery: Cloudflare's managed-challenge
-			// scoring rejects Edge sessions (headless or not), making WAF tests unpassable.
-			// Users can still request Edge explicitly via channel: 'msedge' or executablePath.
+		// excluded and explicitly rejected: Cloudflare's managed-challenge scoring
+		// rejects Edge sessions (headless or not), making WAF tests unpassable.
+		// channel: 'msedge*' throws a clear error; an Edge binary passed via
+		// executablePath keeps its fully native identity (no spoofing).
 		// The paths are arch-agnostic: whatever binary is installed on the machine
 		// (x64, x86 or arm64) is the one that gets launched.
 		function patchwrightSystemBrowserCandidates(): string[] {

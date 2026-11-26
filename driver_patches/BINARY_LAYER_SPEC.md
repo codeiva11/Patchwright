@@ -1,13 +1,19 @@
 # Patchwright — Patched Binary Layer Specification
 
-> **Status: design document only.** This repository implements the TypeScript/AST driver
-> layer. It does not contain, build, or auto-load a patched Chromium binary. The binary
-> patch points below are proposals, not shipped features.
+> **Status: driver layer shipped, binary layer scoped.** The TypeScript/AST driver layer in this
+> repository is fully implemented and CI-verified (see §6). The TLS/JA4/HTTP-2 alignment that
+> the binary layer would otherwise have to fake is already achieved at the driver level:
+> Patchwright launches the machine's own branded browser (genuine BoringSSL ClientHello,
+> HTTP/2 SETTINGS and GPU stack) and adds `--enable-features=TLSTrustAnchorIDs`, and the CI
+> pipeline (`utils/custom_tests/tls_ja4_check.mjs`) gates every push on the JA4 prefix
+> `t13d1517h2_8daaf6152771` plus the HTTP/2 Akamai fingerprint. The C++ patch points in §2
+> remain **proposals for an optional future Chromium fork build** (needed only for pinned-JA4
+> *spoofing*); nothing in this repository builds or auto-loads such a binary.
 
 > This document specifies the C++ / binary-level patch points that **cannot** be implemented as
 > TypeScript AST patches in `driver_patches/`. The TypeScript AST layer (this repository) handles
-> the Playwright driver; this binary layer handles the browser itself. The two layers are wired
-> together by a loader that is not implemented in this repository (see §5).
+> the Playwright driver; this binary layer would handle the browser itself. The two layers are
+> wired together by the driver's binary resolution contract (see §5), which is implemented.
 
 ## 1. Why a binary layer at all?
 
@@ -52,15 +58,26 @@ the Chromium binary and can only be removed there:
   hook (equivalent of the JS `canvasNoise`, applied at the raster level, invisible to
   `getImageData`/`toDataURL` stack-inspection).
 
-### 2.4 TLS / JA4 / HTTP-2 alignment
-- The realistic goal is **alignment, not spoofing**: launching the machine's own browser
-  (`channel: chrome | msedge | brave | vivaldi | opera | chromium-system` via the registry patch)
-  yields the genuine Chrome TLS fingerprint for free. The driver patches make this the default
-  recommendation.
-- If a spoofed fingerprint is genuinely required (e.g. pinned JA4 expectations), the patch lives in
+### 2.4 TLS / JA4 / HTTP-2 alignment — **implemented at the driver layer**
+- **Shipped (driver layer, CI-gated):** Patchwright never launches a bundled Chromium or an
+  automation build. It resolves the machine's own branded browser (Google Chrome → Chromium →
+  Brave via `driver_patches/browserTypePatch.ts`, or `channel: 'chrome' | 'brave' | 'brave-beta' |
+  'vivaldi' | 'opera' | 'chromium-system'` via `driver_patches/systemBrowserPatch.ts`), so the
+  genuine Chrome TLS fingerprint (JA4 `t13d1517h2_8daaf6152771…`), the genuine HTTP/2 Akamai
+  fingerprint and the genuine GPU/DLL stack come for free. `driver_patches/chromiumLaunchPatch.ts`
+  adds `--enable-features=TLSTrustAnchorIDs` so the trust-anchor extension bit (`17h2`) matches
+  current Chrome releases (opt out with `PATCHWRIGHT_TLS_ALIGN=0`).
+  `utils/custom_tests/tls_ja4_check.mjs` runs against tls.peet.ws in CI on every push and fails
+  the run if the JA4 prefix drifts; the HTTP/2 hash is logged for observability.
+- **Out of support:** `channel: 'msedge*'` is rejected at launch and the msedge registry channels
+  are removed — Edge sessions score poorly on managed-challenge WAFs and Patchwright never
+  brands or spoofs Edge.
+- **Future binary work (optional):** if a spoofed fingerprint is genuinely required (e.g. pinned
+  JA4 expectations with a non-Chrome binary), the patch lives in
   **`net/socket/ssl_client_socket_impl.cc`** (ClientHello cipher/extension ordering) and
   **`net/http/http_network_session.cc`** (SETTINGS frame ordering). Both are build-time changes;
-  they must be validated against the exact BoringSSL revision of the target Chromium.
+  they must be validated against the exact BoringSSL revision of the target Chromium. Until that
+  fork exists, this section is satisfied by the driver-level alignment above.
 
 ## 3. Profile / process hygiene (binary side)
 
@@ -88,8 +105,9 @@ The driver resolves executables in this order (see `driver_patches/browserTypePa
 3. `PATCHWRIGHT_EXECUTABLE_PATH` environment variable (alias).
 4. `~/.patchwright/patchwright-chromium[.exe]` — a conventional path the driver checks. No
    Patchwright binary installer or auto-loader ships in this repository.
-5. Registry fallback: bundled Chromium or a system channel (`chrome`, `msedge`, `brave`,
-   `vivaldi`, `opera`, `chromium-system`, ...).
+5. Registry fallback: a system channel (`chrome`, `brave`, `brave-beta`, `vivaldi`, `opera`,
+   `chromium-system`). The bundled Chrome-for-Testing registry is never used, and all
+   `msedge*` channels are removed (see §2.4).
 
 A patched binary and the driver communicate fingerprint configuration through environment
 variables (`PATCHWRIGHT_FINGERPRINT`, `PATCHRIGHT_*` naming is kept stable), so the same config
@@ -100,5 +118,6 @@ required.
 
 Everything else in this repository: launch pipeline, switch sanitisation, WebRTC policy flags,
 Runtime/Console leak removal, isolated execution contexts, init-script route injection, human
-input simulation, proxy geo alignment and the opt-in JS fingerprint module. The binary layer is not implemented here; the driver remains functional with system browsers
-alone.
+input simulation, proxy geo alignment and the opt-in JS fingerprint module. The optional C++
+binary layer is not built here; the driver remains fully functional and CI-verified with system
+browsers alone.

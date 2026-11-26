@@ -8,7 +8,7 @@ import { type Project } from "ts-morph";
 // Function.prototype.toString still reports native code. Canvas noise uses a
 // stable per-profile seed instead of Math.random(), so a reload does not change
 // the canvas hash.
- export function patchFingerprintHardening(project: Project) {
+export function patchFingerprintHardening(project: Project) {
 	const sourceFile = project.addSourceFileAtPath("packages/playwright-core/src/server/browserContext.ts");
 	const scriptFunction = (cfg: any): string => {
 		const lines = [

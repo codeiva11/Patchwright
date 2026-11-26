@@ -10,10 +10,7 @@ export function patchViewportSurface(project: Project) {
 	let text = sourceFile.getFullText();
 	text = replaceRequired(
 		text,
-		[
-			"    const viewportSize = emulatedSize.viewport;",
-			"    const screenSize = emulatedSize.screen;",
-		].join("\n"),
+		["    const viewportSize = emulatedSize.viewport;", "    const screenSize = emulatedSize.screen;"].join("\n"),
 		[
 			"    const viewportSize = emulatedSize.viewport;",
 			"    let screenSize = emulatedSize.screen;",

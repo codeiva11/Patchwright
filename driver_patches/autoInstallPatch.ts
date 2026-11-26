@@ -25,7 +25,12 @@ export function patchAutoInstall(project: Project) {
 	// 1) child_process import for the installer helpers.
 	applyReplacements(
 		browserTypeSourceFile,
-		[["import path from 'path';", "import path from 'path';\nimport { execFile as patchwrightExecFile } from 'child_process';"]],
+		[
+			[
+				"import path from 'path';",
+				"import path from 'path';\nimport { execFile as patchwrightExecFile } from 'child_process';",
+			],
+		],
 		"server/browserType.ts (child_process import)",
 	);
 
@@ -48,8 +53,12 @@ export function patchAutoInstall(project: Project) {
 			"candidates.push(...) call",
 		);
 	const darwinPush = findPush(darwinIf);
-	darwinPush.addArgument("path.join(os.homedir(), 'Applications', 'Brave Browser.app', 'Contents', 'MacOS', 'Brave Browser')");
-	darwinPush.addArgument("path.join(os.homedir(), 'Applications', 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome')");
+	darwinPush.addArgument(
+		"path.join(os.homedir(), 'Applications', 'Brave Browser.app', 'Contents', 'MacOS', 'Brave Browser')",
+	);
+	darwinPush.addArgument(
+		"path.join(os.homedir(), 'Applications', 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome')",
+	);
 	darwinPush.addArgument("path.join(os.homedir(), 'Applications', 'Chromium.app', 'Contents', 'MacOS', 'Chromium')");
 	// Patchwright: Flatpak user/system installs expose launchers on Linux.
 	const linuxElse = assertDefined(darwinIf.getElseStatement(), "linux platform branch of system browser candidates");
@@ -69,17 +78,19 @@ export function patchAutoInstall(project: Project) {
 	//    top and would have run auto-install on every launch, before the scan).
 	applyReplacements(
 		browserTypeSourceFile,
-		[[
-			"\t\t\tthrow new Error('Patchwright: no official system browser found (Google Chrome, Chromium or Brave). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
-			"\t\t\t// Patchwright: the scan found nothing - install one automatically\n" +
-				"\t\t\t// (Chrome -> Chromium -> Brave) so a clean machine works out of the box.\n" +
-				"\t\t\t// Opt out with PATCHWRIGHT_AUTO_INSTALL=0.\n" +
-				"\t\t\tif (process.env.PATCHWRIGHT_AUTO_INSTALL !== '0') {\n" +
+		[
+			[
+				"\t\t\tthrow new Error('Patchwright: no official system browser found (Google Chrome, Chromium or Brave). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
+				"\t\t\t// Patchwright: the scan found nothing - install one automatically\n" +
+					"\t\t\t// (Chrome -> Chromium -> Brave) so a clean machine works out of the box.\n" +
+					"\t\t\t// Opt out with PATCHWRIGHT_AUTO_INSTALL=0.\n" +
+					"\t\t\tif (process.env.PATCHWRIGHT_AUTO_INSTALL !== '0') {\n" +
 					"\t\t\t\tconst installedCandidate = await patchwrightAutoInstallSystemBrowser();\n" +
 					"\t\t\t\tif (installedCandidate) return installedCandidate;\n" +
 					"\t\t\t}\n" +
 					"\t\t\tthrow new Error('Patchwright: no official system browser found (Google Chrome, Chromium or Brave). Install one of these browsers, or point PATCHWRIGHT_BINARY at a browser executable.');",
-		]],
+			],
+		],
 		"server/browserType.ts (auto-install before the no-browser throw)",
 	);
 

@@ -26,7 +26,7 @@
 </h4>
 
 > [!IMPORTANT]  
-> **Patchwright exclusively patches CHROMIUM-based browsers** (Google Chrome, Microsoft Edge, Chromium). Firefox and WebKit are not supported.
+> **Patchwright exclusively patches CHROMIUM-based browsers** (Google Chrome, Brave, Vivaldi, Opera, Chromium). Microsoft Edge is not supported. Firefox and WebKit are not supported.
 
 ---
 
@@ -115,7 +115,7 @@ Standard Playwright exposes globals such as `window.__pwInitScripts` and `__play
 Allows locating and interacting with elements embedded inside **Closed Shadow Roots** using standard Playwright locators and custom XPath selectors.
 
 ### 6. ✅ System-Browser-First Launch & Patched Binary Auto-Load (no bundled download)
-Patchwright launches pre-installed browsers natively: `channel: 'chrome'`, `'msedge'`, plus new channels `'brave'`, `'brave-beta'`, `'vivaldi'`, `'opera'` and `'chromium-system'`. With no explicit target it auto-resolves an official system browser (Google Chrome → Chromium → Brave; Microsoft Edge is excluded from auto-discovery because Cloudflare's managed-challenge scoring rejects Edge sessions). **The bundled Chrome-for-Testing registry is never used or downloaded** — resolution order: `executablePath` → `PATCHWRIGHT_BINARY` / `PATCHWRIGHT_EXECUTABLE_PATH` → `~/.patchwright/patchwright-chromium` → system browsers; a clean error (no install suggestion) if nothing is found. Temporary profiles use neutral names (`pw_*_profile-`), never `playwright_*_dev_profile-`.
+Patchwright launches pre-installed browsers natively: `channel: 'chrome'`, `'brave'`, `'brave-beta'`, `'vivaldi'`, `'opera'` and `'chromium-system'`. With no explicit target it auto-resolves an official system browser (Google Chrome → Chromium → Brave). **Microsoft Edge is not supported**: `channel: 'msedge*'` is rejected at launch, the msedge registry channels are removed, and an Edge binary passed via `executablePath` keeps its fully native identity (never branded or spoofed) because anti-bot managed-challenge scoring rejects Edge sessions. **The bundled Chrome-for-Testing registry is never used or downloaded** — resolution order: `executablePath` → `PATCHWRIGHT_BINARY` / `PATCHWRIGHT_EXECUTABLE_PATH` → `~/.patchwright/patchwright-chromium` → system browsers; a clean error (no install suggestion) if nothing is found. Temporary profiles use neutral names (`pw_*_profile-`), never `playwright_*_dev_profile-`.
 
 ### 7. ✅ WebRTC IP Leak Protection
 When a proxy is configured, Patchwright sends `--webrtc-ip-handling-policy=disable_non_proxied_udp` plus `--enforce-webrtc-ip-permission-check`, so WebRTC does not expose a non-proxied interface IP. Without a proxy it leaves native WebRTC behaviour intact, because forcing the policy on a direct connection is itself a fingerprint. Override with `PATCHWRIGHT_WEBRTC_POLICY=<chromium policy value>`.
@@ -146,20 +146,20 @@ profile's Preferences with Brave-shields-v2 content settings
 (`fingerprintingV2` / `httpsUpgrades` disabled globally) so the engine reports
 exact, authentic values. Opt out with `PATCHWRIGHT_BRAVE_FARBLING=0`.
 
-### 12. ✅ System Browser Identity Alignment (system Brave/Edge/Chrome/Chromium)
+### 12. ✅ System Browser Identity Alignment (system Brave/Chrome/Chromium)
 
 When a system browser is launched through the driver, Patchwright aligns its native identity
 with the Chrome identity the UA claims, using a single native `Network.setUserAgentOverride`:
 
 * **HeadlessChrome → Chrome token fix** (Brave/Chromium keep the token even with `--headless=new`).
-* **Client-Hints brand alignment**: Edge keeps its native Edge brands; Brave keeps its native
-  Brave brand; Chrome and Chromium expose their real brand list with grease rotation. Patchwright
-  never appends a fake `Google Chrome` entry to another vendor's brand list.
+* **Client-Hints brand alignment**: Brave keeps its native Brave brand; Chrome and Chromium expose
+  their real brand list with grease rotation. Patchwright never appends a fake `Google Chrome`
+  entry to another vendor's brand list, and never brands Edge at all (Edge binaries launched via
+  `executablePath` keep their fully native identity).
 * **Dynamic full versions**: the browser binary's real build is read via `--version` at launch
   and surfaced through `fullVersionList` / `uaFullVersion` — nothing hardcoded. The UA string
   stays in Chrome's authentic reduced format (`Chrome/158.0.0.0`); `fullVersionList` carries the
-  full build. For Edge, the Chromium entry is derived from the Edge product version, so it can
-  differ from Edge's native Chromium base version.
+  full build.
 * **`navigator.brave` is hidden** by deleting it on the instance and `Navigator.prototype`;
   `Object.getOwnPropertyNames(navigator)` stays empty, like real Chrome. This is a JS-level
   property deletion, not a binary patch. Opt out with `PATCHWRIGHT_SYSTEM_STEALTH=0`.
@@ -171,7 +171,7 @@ with the Chrome identity the UA claims, using a single native `Network.setUserAg
 
 Chromium 152+ sends the `trust_anchors` (0xCA34) extension in every ClientHello, which moves
 JA4 from `t13d1516h2` to `t13d1517h2` — the fingerprint every server sees **before any page
-code runs**. Chrome and Edge ship it by default; Brave does not, so Brave's ClientHello looked
+code runs**. Chrome ships it by default; Brave does not, so Brave's ClientHello looked
 one Chromium generation older than the Chrome identity it claims. Patchwright always launches
 with `--enable-features=TLSTrustAnchorIDs`. The local check verifies the Chrome 17h2 JA4 prefix
 (`t13d1517h2_8daaf6152771`); the full extension hash can vary by platform/build, and HTTP/2 is
@@ -308,7 +308,7 @@ npm i -D "C:/path/to/Patchwright/patchwright-core-<version>.tgz" \
 # no browser download is needed - Patchwright auto-resolves an official system browser
 # (Brave -> Chrome -> Chromium); optionally point at one explicitly:
 #   PATCHWRIGHT_BINARY="C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
-#   or channel: 'brave' / 'msedge' / 'chrome' in launch options
+#   or channel: 'brave' / 'chrome' / 'vivaldi' / 'opera' in launch options
 ```
 
 Example test script (`test.mjs`):
@@ -448,7 +448,7 @@ both packages never clobbers either command.
 > uses or downloads bundled browsers, so **do not run** any `install` browser command (or
 > `npm i playwright-chromium` / `@playwright/browser-chromium`). `chromium.launch()`
 > auto-resolves the machine's own browser (Brave → Chrome → Chromium). Target one
-> explicitly with `channel: 'brave' | 'brave-beta' | 'chrome' | 'msedge' | 'vivaldi' |
+> explicitly with `channel: 'brave' | 'brave-beta' | 'chrome' | 'vivaldi' |
 > 'opera' | 'chromium-system'`, `executablePath`, or `PATCHWRIGHT_BINARY` /
 > `PATCHWRIGHT_EXECUTABLE_PATH` (managed binaries live in `~/.patchwright/`).
 

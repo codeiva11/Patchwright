@@ -61,76 +61,10 @@ export function patchSystemStealth(project: Project) {
 	// chrome://version target. about:blank and data: URLs do not expose
 	// navigator.userAgentData, so the old snapshot always returned empty values.
 	crPageSourceFile.addStatements(`
-		type PatchwrightMetadata = { ua: string; brave: boolean; hev: any; chromiumVersion?: string };
-		const patchwrightMetadataCache = new Map<string, PatchwrightMetadata>();
-		const patchwrightMetadataPromises = new Map<string, Promise<PatchwrightMetadata | null>>();
+		type PatchwrightMetadata = { ua: string; brave: boolean; hev: any };
 
-		async function patchwrightReadNativeMetadata(browser: any): Promise<PatchwrightMetadata | null> {
-			const options = browser.options;
-			const key = [options.customExecutablePath || options.channel || options.name, process.platform, process.arch].join('|');
-			const cached = patchwrightMetadataCache.get(key);
-			if (cached)
-				return cached;
-			const pending = patchwrightMetadataPromises.get(key);
-			if (pending)
-				return await pending;
-			const promise = (async (): Promise<PatchwrightMetadata | null> => {
-				let root: any;
-				let targetId: string | undefined;
-				let session: any;
-				const send = (target: any, method: string, params?: any) => target._send(method, params);
-				const executableName = String(options.customExecutablePath || options.executablePath || '').toLowerCase();
-				const isEdge = String(options.channel || '').toLowerCase().includes('edge') || executableName.includes('msedge');
-				const versionUrl = isEdge ? 'edge://version' : 'chrome://version';
-				try {
-					root = await browser._clientRootSession();
-					const created = await send(root, 'Target.createTarget', { url: 'about:blank', background: true });
-					targetId = created.targetId;
-					session = await root.attachToTarget(targetId);
-					await send(session, 'Page.navigate', { url: versionUrl }).catch(() => { });
-					await new Promise(resolve => setTimeout(resolve, 500));
-					const result = await send(session, 'Runtime.evaluate', {
-						expression: \`(async () => {
-							const ua = navigator.userAgent;
-							const brave = !!navigator.brave;
-							const hev = navigator.userAgentData ? await navigator.userAgentData.getHighEntropyValues(['brands', 'fullVersionList', 'platform', 'platformVersion', 'architecture', 'bitness', 'model', 'mobile', 'wow64']).catch(() => null) : null;
-							let versionText = '';
-							for (let i = 0; i < 100; i++) {
-								versionText = document.body ? (document.body.textContent || '') : '';
-								if (/Chromium version/i.test(versionText))
-									break;
-								await new Promise(resolve => setTimeout(resolve, 25));
-							}
-							const chromiumVersion = (versionText.match(/Chromium version[\\s\\u00a0]+([\\d.]+)/i) || [])[1] || '';
-							return JSON.stringify({ ua, brave, hev, chromiumVersion });
-						})()\`,
-						returnByValue: true,
-						awaitPromise: true,
-					});
-					const value = result?.result?.value;
-					if (!value)
-						return null;
-					const parsed = JSON.parse(value) as PatchwrightMetadata;
-					if (!parsed.ua || !parsed.hev)
-						return await patchwrightFallbackMetadata(browser);
-					patchwrightMetadataCache.set(key, parsed);
-					return parsed;
-				} catch {
-					return await patchwrightFallbackMetadata(browser);
-				} finally {
-					// Closing the target also detaches its flattened session.
-					try { if (targetId && root) await send(root, 'Target.closeTarget', { targetId }); } catch { }
-					patchwrightMetadataPromises.delete(key);
-				}
-			})();
-			patchwrightMetadataPromises.set(key, promise);
-			return await promise;
-		}
-
-		// Fallback for browsers that block chrome://version targets (notably
-		// some Brave builds): synthesize the same native metadata from
-		// Browser.getVersion and the executable identity. Never leave the
-		// HeadlessChrome token in the UA.
+		// Fallback: synthesize native metadata from Browser.getVersion and the
+		// executable identity. Never leave the HeadlessChrome token in the UA.
 		const patchwrightFallbackCache = new Map<string, PatchwrightMetadata>();
 		async function patchwrightFallbackMetadata(browser: any): Promise<PatchwrightMetadata | null> {
 			const options = browser.options;
@@ -146,9 +80,14 @@ export function patchSystemStealth(project: Project) {
 				const majorVersion = fullVersion.split('.')[0] || '0';
 				const executable = String(options.customExecutablePath || options.executablePath || '').toLowerCase();
 				const channel = String(options.channel || '').toLowerCase();
+				// Patchwright drops Microsoft Edge support: Edge is never branded, never
+				// spoofed, and no Edge identity is ever synthesized. If an Edge binary is
+				// launched through an explicit executablePath, keep its fully native
+				// identity (UA, client hints, TLS stack) instead of contradicting it.
+				if (channel.includes('edge') || channel.includes('msedge') || executable.includes('msedge'))
+					return null;
 				const brave = channel.includes('brave') || executable.includes('brave');
-				const edge = channel.includes('edge') || channel.includes('msedge') || executable.includes('msedge');
-				const brand = brave ? 'Brave' : edge ? 'Microsoft Edge' : 'Google Chrome';
+				const brand = brave ? 'Brave' : 'Google Chrome';
 				const platform = process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'macOS' : 'Linux';
 				const platformVersion = platform === 'Windows' ? '19.0.0' : platform === 'macOS' ? '15.0.0' : '';
 				const result: PatchwrightMetadata = {
@@ -214,7 +153,12 @@ export function patchLazyConsole(project: Project) {
 	{
 		const sourceFile = project.addSourceFileAtPath("packages/playwright-core/src/server/page.ts");
 		let text = sourceFile.getFullText();
-		text = replaceRequired(text, "  bringToFront(): Promise<void>;\n", "  bringToFront(): Promise<void>;\n  enableConsole?(): Promise<void>;\n", "PageDelegate.enableConsole");
+		text = replaceRequired(
+			text,
+			"  bringToFront(): Promise<void>;\n",
+			"  bringToFront(): Promise<void>;\n  enableConsole?(): Promise<void>;\n",
+			"PageDelegate.enableConsole",
+		);
 		text = replaceRequired(
 			text,
 			"  async bringToFront(progress: Progress): Promise<void> {\n    await progress.race(this.delegate.bringToFront());\n  }\n",
