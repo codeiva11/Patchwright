@@ -292,125 +292,9 @@ npm run rebuild
 # then rebrand + pack as in steps 6-7 above
 ```
 
-### 3. Include the Local Build in Your Own Project and Test It
-
-In **your** project (anywhere on the machine), install the local tarballs:
-
-```bash
-# from your project directory
-cd path/to/your-project
-npm init -y   # if there is no package.json yet
-
-# install the locally built packages (adjust the paths to your Patchwright checkout)
-npm i -D "C:/path/to/Patchwright/patchwright-core-<version>.tgz" \
-         "C:/path/to/Patchwright/patchwright-<version>.tgz"
-
-# no browser download is needed - Patchwright auto-resolves an official system browser
-# (Brave -> Chrome -> Chromium); optionally point at one explicitly:
-#   PATCHWRIGHT_BINARY="C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
-#   or channel: 'brave' / 'chrome' / 'vivaldi' / 'opera' in launch options
-```
-
-Example test script (`test.mjs`):
-
-```js
-import { chromium } from 'patchwright-core';
-
-// opt-in fingerprint alignment (see features above)
-process.env.PATCHWRIGHT_FINGERPRINT = JSON.stringify({
-  hardwareConcurrency: 16,
-  deviceMemory: 16,
-  canvasNoise: true,
-  webglVendor: 'Intel',
-  webglRenderer: 'Intel Iris OpenGL Engine',
-  permissions: { granted: ['geolocation'] },
-});
-
-const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage();
-await page.goto('https://bot.sannysoft.com/');
-
-// human-like interaction
-await page.mouse.moveHuman(300, 220);
-await page.keyboard.typeHuman('patchwright local ok');
-await page.mouse.scrollHuman(600);
-
-await page.screenshot({ path: 'detection_result.png' });
-await browser.close();
-```
-
-```bash
-node test.mjs
-# -> should run cleanly and show navigator.webdriver = false on the detection page
-```
-
 > The published packages are a drop-in replacement for Playwright, so you can also just swap
 > `playwright` -> `patchwright-core` (library) or `@playwright/test` -> `patchwright`
 > (runner) in your imports and uninstall the originals.
-
-#### Quick feature flags for local testing
-
-```bash
-PATCHWRIGHT_FINGERPRINT='{"hardwareConcurrency":16,"deviceMemory":16,"canvasNoise":true}' node test.mjs
-PATCHWRIGHT_PERMISSIONS=all              node test.mjs   # CDP-level permission grants
-PATCHWRIGHT_GEO_ALIGN=1                  node test.mjs   # proxy -> timezone/locale/geo auto-align
-PATCHWRIGHT_EXECUTABLE_PATH="C:/path/to/brave.exe" node test.mjs  # patched-binary/system override
-```
-
----
-
-### Upgrading to a New Playwright Version (Auto-Patch Pipeline)
-
-All Patchwright features are **Core-level AST patches** shipped as source transforms in
-[`driver_patches/`](driver_patches/) and [`patchwright-nodejs/client_patches/`](patchwright-nodejs/client_patches/).
-When a new Playwright release arrives, every feature is re-applied automatically by
-re-running the pipeline on the new source — no manual code edits inside the Playwright tree:
-
-```bash
-cd playwright
-git fetch && git checkout <new-version-tag>
-git checkout HEAD -- packages/ && git clean -fdx -e node_modules   # always start from a clean tree
-cd ..
-npx tsx patchwright_driver_patch.ts                # applies ALL AST patches (driver + client)
-npm --prefix playwright run build && npm --prefix playwright run build   # run twice (channel-gen race)
-npx tsx utils/patchwright_rebranding.ts
-npm pack --prefix playwright/packages/patchwright-core
-npm pack --prefix playwright/packages/patchwright
-```
-
-Behavior on upstream changes:
-
-* **Unchanged targets apply automatically — 100% coverage.** Transforms are AST-based
-  (ts-morph) matched by stable declaration names (`browserType`, `launch`, `addInitScript`,
-  `FrameSession`, ...), never by line numbers or copied blobs.
-* **Refactored upstream functions fail loudly, never silently.** The pipeline throws at the
-  exact patch whose target moved (file/function name in the error); you then update only
-  that one patch file while all other features keep applying untouched. This is by design —
-  a patch that silently no-ops would be an undetectable security regression.
-* **Reproducible builds.** Each run starts from vanilla Playwright (`git checkout HEAD --
-  packages/ && git clean`), so the output is deterministic for a given (patch set, version) pair.
-* **Post-upgrade verification:** `npm run typecheck` (root),
-  `node utils/custom_tests/runtime_smoke_test.mjs`, `node utils/custom_tests/tls_ja4_check.mjs`,
-  and the live-detector suite.
-
-### Fixed Builds Between Playwright Versions (no waiting needed)
-
-A fixed build does **not** have to wait for the next upstream Playwright release — and it
-keeps the **same version number** as the upstream release (e.g. `1.65.1`). The standard
-**Patchwright Release Build and Publish** workflow handles both channels:
-
-* **npm** — published only if that exact version is still free on the registry; if the
-  same version already exists there (e.g. a buggy `1.65.1`), npm publishing is skipped
-  automatically (`npm view` check before `npm publish`).
-* **GitHub** — always: the built tarballs (`patchwright-core-<version>.tgz` and the
-  optional test-runner wrapper) are attached to the GitHub release for that same version;
-  existing release assets are replaced (`--clobber`) on every run, so a fixed build
-  pushed with the same version always lands on GitHub.
-* Install the fixed build from GitHub whenever npm already has the version:
-  `npm i https://github.com/<owner>/<repo>/releases/download/1.65.1/patchwright-core-1.65.1.tgz`
-* No version-suffix scheme and no collision when a real Playwright `1.65.2` ships later.
-* Local builds can stamp the version via `PATCHWRIGHT_VERSION=1.65.1` before running
-  `npx tsx utils/patchwright_rebranding.ts` (from the `playwright/` directory).
 
 ## 📖 All Commands Reference
 
@@ -426,23 +310,6 @@ keeps the **same version number** as the upstream release (e.g. `1.65.1`). The s
 | `npm run format` | Runs automatic indentation fixing and style validation. |
 | `npm run format:fix` | Fixes indentation across patches automatically. |
 | `npm run format:check` | Validates formatting against Biome and Git diff checks. |
-
-### CLI Commands
-
-Patchwright never downloads or launches bundled Chrome-for-Testing builds, so there is **no
-browser-download command at all** — browser resolution is always system-first. Bin names are
-distinct (`patchwright` = test-runner wrapper, `patchwright-core` = driver CLI), so installing
-both packages never clobbers either command.
-
-| CLI Command | Description |
-| :--- | :--- |
-| `npx patchwright test` | Run tests — drop-in replacement for `playwright test`. |
-| `npx patchwright show-report` | Open the HTML test report. |
-| `npx patchwright merge-reports [dir]` | Merge sharded blob reports. |
-| `npx patchwright clear-cache` | Clear the test-runner transform cache. |
-| `npx patchwright init-agents` / `init-skills` | Generate agent/skill scaffolding. |
-| `npx patchwright-core install-deps` | Install operating-system dependencies (Linux) — **includes Xvfb**. |
-| `npx patchwright-core --version` | Prints the current Patchwright version. |
 
 > 🖥️ **System-browser guidance — there is no browser-install step.** Patchwright never
 > uses or downloads bundled browsers, so **do not run** any `install` browser command (or
@@ -466,42 +333,6 @@ both packages never clobbers either command.
 > Xvfb is unnecessary. No Patchwright-side integration is needed.
 
 ---
-
-## 🧪 Testing & Verification
-
-### 1. Run Built-In Detection Smoke Test
-Run the comprehensive leak detection smoke test:
-
-```bash
-node utils/detection_smoke_test.mjs
-```
-*Verifies `navigator.webdriver = false`, zero Playwright global leaks, and zero `Error.stack` serialization.*
-*Uses the auto-resolved system browser (Brave → Chrome → Chromium) — no bundled download needed.*
-
-### 2. Run the New-Features Runtime Smoke Test
-Verifies all newly added core patches against the locally built `patchwright-core` (fingerprint spoofing in the main world, WebRTC launch flags, system channels, human input, temp-profile naming):
-
-```bash
-node utils/custom_tests/runtime_smoke_test.mjs
-# -> 15/15 PASS expected (bundled chromium is used automatically)
-```
-
-### 3. Run the TLS/JA4 Alignment Check
-Verifies the launched browser's TLS ClientHello fingerprint matches genuine Chrome:
-
-```bash
-node utils/custom_tests/tls_ja4_check.mjs
-# -> PASS: JA4 matches genuine Chrome profile (t13d1517h2_8daaf6152771_cb7bf5808d99)
-```
-
-### 4. Run the Real-World Detector Suite (Real-Browser-MCP)
-Live-detector results with system browsers (Brave / Chrome, headless):
-
-```text
-The repository's local smoke tests pass. Live third-party detector results depend on the
-current detector version, IP reputation, proxy quality and browser build. They are not a
-100% undetectability guarantee and are not reproduced here as one.
-```
 
 ### 5. Run Playwright Core Tests
 To verify that Playwright APIs function correctly with the patches:
