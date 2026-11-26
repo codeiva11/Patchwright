@@ -133,7 +133,7 @@ jobs:
         continue-on-error: ${{ github.event_name == 'workflow_call' }}
         run: |
           cd playwright
-          PWTEST_MODE=driver xvfb-run -a npx playwright test --config=tests/library/playwright.config.ts --project=chromium-library --workers=1 --max-failures=0 --reporter=line --retries=3
+          PWTEST_MODE=driver xvfb-run -a npx playwright test --config=tests/library/playwright.config.ts --project=chromium-library --max-failures=0 --reporter=line --retries=3
 
       - name: Set Test Outcome
         id: set_test_outcome

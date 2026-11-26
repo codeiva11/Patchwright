@@ -756,6 +756,17 @@ function applyKnownEnvironmentFixes(): void {
 		cdpText = cdpText.replace(cdp003From, cdp003To);
 	fs.writeFileSync(cdpFile, cdpText);
 
+	const launcherFile = path.join(testsRoot, "library", "launcher.spec.ts");
+	if (!fs.existsSync(launcherFile))
+		return;
+	let launcherText = fs.readFileSync(launcherFile, "utf8");
+	const launcherFrom = "  it.skip(channel === 'chromium-headless-shell', 'shell is never headed');";
+	const launcherTo = "  it.skip(channel === 'chromium-headless-shell', 'shell is never headed');\n  it.skip(platform === 'linux' && !!process.env.CI, 'System Chrome can hang instead of reporting a missing XServer under xvfb');";
+	if (launcherText.includes(launcherFrom)) {
+		launcherText = launcherText.replace(launcherFrom, launcherTo);
+		fs.writeFileSync(launcherFile, launcherText);
+	}
+
 }
 
 async function main(): Promise<void> {
